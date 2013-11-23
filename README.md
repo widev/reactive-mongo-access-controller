@@ -10,3 +10,5 @@ Most of the API has been taken from the `ReactiveMongo` so you can use it the sa
 The project is still in development, but I am actually working hard on it in order to use it for several of my personnal projects, so it should be released soon.
 
 Most of the API methods are actually tested, so you can give it a try. However, the sources are still growing fast.
+
+The API scala documentation should be available soon.
