@@ -5,11 +5,13 @@ import reactivemongo.core.commands._
 import reactivemongo.bson._
 import reactivemongo.api.collections.GenericQueryBuilder
 import play.api.libs.iteratee._
-import reactivemongo.api.{Cursor, FailoverStrategy}
+import reactivemongo.api.{QueryOpts, ReadPreference, Cursor, FailoverStrategy}
 import reactivemongo.api.collections.default.BSONCollection
 import scala.collection.generic.CanBuildFrom
 import reactivemongo.api.indexes.{IndexType, Index}
 import scala.concurrent.duration._
+import scala.util.parsing.input.Reader
+import java.io.Writer
 
 object DB {
   def apply(name: String, failoverStrategy: FailoverStrategy = Store.db.failoverStrategy): AccessControlCollection = collection(name, failoverStrategy)
@@ -19,6 +21,29 @@ object DB {
 object Rights extends Enumeration {
   type Rights = Value
   val read, write, none = Value
+}
+
+object Utils {
+  private[accesscontroller] def wrapExternalQuery[S](query: S)(implicit writer: BSONDocumentWriter[S]): BSONDocument = {
+    def wrap(document: BSONDocument): BSONDocument =
+      BSONDocument(document.elements.toTraversable.map {
+        case (key, value: BSONDocument) if key(0) == '$' => (key, wrap(value))
+        case (key, value) => ("model." + key, value)
+      })
+    wrap(writer.write(query))
+  }
+
+  private[accesscontroller] def wrapSelector[S](selector: S)(implicit writer: BSONDocumentWriter[S], ac: AccessContext): BSONDocument = {
+    val ids = BSONArray(ac.user.groups + ac.user._id)
+    wrapExternalQuery(selector) ++ BSONDocument(
+      "$or" -> BSONArray(
+        BSONDocument("accessLists.writers" -> BSONDocument("$all" -> ids)),
+        BSONDocument("accessLists.readers" -> BSONDocument("$all" -> ids))
+      )
+    )
+  }
+
+  private[accesscontroller] def wrapUpdate[U](update: U)(implicit writer: BSONDocumentWriter[U]): BSONDocument = wrapExternalQuery(update)
 }
 
 sealed case class AccessControlCursor[T](cursor: Cursor[AccessControl])(implicit reader: BSONDocumentReader[T]) {
@@ -52,7 +77,30 @@ sealed case class AccessControlCursor[T](cursor: Cursor[AccessControl])(implicit
 }
 
 sealed case class AccessControlQueryBuilder(queryBuilder: GenericQueryBuilder[BSONDocument, BSONDocumentReader, BSONDocumentWriter]) {
-  def cursor[T](implicit ec: ExecutionContext, reader: BSONDocumentReader[T]): AccessControlCursor[T] = AccessControlCursor[T](queryBuilder.cursor[AccessControl])
+  def cursor[T](implicit reader: BSONDocumentReader[T] = queryBuilder.structureReader, ec: ExecutionContext): AccessControlCursor[T] = AccessControlCursor[T](queryBuilder.cursor[AccessControl])
+
+  def cursor[T](readPreference: ReadPreference)(implicit reader: BSONDocumentReader[T] = queryBuilder.structureReader, ec: ExecutionContext): AccessControlCursor[T] =
+    AccessControlCursor[T](queryBuilder.cursor[AccessControl](readPreference))
+
+  def one[T](implicit reader: BSONDocumentReader[T], ec: ExecutionContext): Future[Option[T]] = cursor(reader, ec).headOption
+
+  def one[T](readPreference: ReadPreference)(implicit reader: BSONDocumentReader[T], ec: ExecutionContext): Future[Option[T]] = cursor(readPreference)(reader, ec).headOption
+
+  def query[Qry](selector: Qry)(implicit writer: BSONDocumentWriter[Qry], ac: AccessContext): AccessControlQueryBuilder = copy(queryBuilder.query(Utils.wrapSelector(selector)))
+
+  def sort(document: BSONDocument): AccessControlQueryBuilder = copy(queryBuilder.sort(Utils.wrapUpdate(document)))
+
+  def options(options: QueryOpts): AccessControlQueryBuilder = copy(queryBuilder.options(options))
+
+  def projection[Pjn](p: Pjn)(implicit writer: BSONDocumentWriter[Pjn], ac: AccessContext): AccessControlQueryBuilder = copy(queryBuilder.projection(Utils.wrapUpdate(p)))
+
+  def projection(p: BSONDocument, ac: AccessContext): AccessControlQueryBuilder = copy(queryBuilder.projection(Utils.wrapUpdate(p)))
+
+  def hint(document: BSONDocument): AccessControlQueryBuilder = copy(queryBuilder.hint(Utils.wrapUpdate(document)))
+
+  def snapshot(flag: Boolean = true): AccessControlQueryBuilder = copy(queryBuilder.snapshot(flag))
+
+  def comment(message: String): AccessControlQueryBuilder = copy(queryBuilder.comment(message))
 }
 
 case class AccessControlCollection(name: String, failoverStrategy: FailoverStrategy = Store.db.failoverStrategy) {
@@ -63,30 +111,8 @@ case class AccessControlCollection(name: String, failoverStrategy: FailoverStrat
     Await.result(collection.indexesManager.ensure(Index(List("model._id" -> IndexType.Ascending), unique = true)), 1 second)
   }
 
-  private def wrapExternalQuery[S](query: S)(implicit writer: BSONDocumentWriter[S]): BSONDocument = {
-    def wrap(document: BSONDocument): BSONDocument =
-      BSONDocument(document.elements.toTraversable.map {
-        case (key, value: BSONDocument) if key(0) == '$' => (key, wrap(value))
-        case (key, value) => ("model." + key, value)
-      })
-    wrap(writer.write(query))
-  }
-
-  private def wrapSelector[S](selector: S)(implicit writer: BSONDocumentWriter[S], ac: AccessContext): BSONDocument = {
-    val ids = BSONArray(ac.user.groups + ac.user._id)
-    wrapExternalQuery(selector) ++ BSONDocument(
-      "$or" -> BSONArray(
-        BSONDocument("accessLists.writers" -> BSONDocument("$all" -> ids)),
-        BSONDocument("accessLists.readers" -> BSONDocument("$all" -> ids))
-      )
-    )
-  }
-
-  private def wrapUpdate[U](update: U)(implicit writer: BSONDocumentWriter[U]): BSONDocument =
-    wrapExternalQuery(update)
-
   private def setRights[S, U](selector: S, id: BSONObjectID, rights: Rights.Value)(implicit swriter: BSONDocumentWriter[S], ec: ExecutionContext, ac: AccessContext) =
-    collection.update(wrapSelector(selector),
+    collection.update(Utils.wrapSelector(selector),
       rights match {
         case Rights.read =>
           BSONDocument("$addToSet" -> BSONDocument("accessLists.readers" -> id), "$pull" -> BSONDocument("accessLists.writers" -> id))
@@ -112,7 +138,7 @@ case class AccessControlCollection(name: String, failoverStrategy: FailoverStrat
 //    collection.find(wrapSelector(swriter.write(selector)), pwriter.write(projection))
 
   def find[S](selector: S)(implicit swriter: BSONDocumentWriter[S], ac: AccessContext, ec: ExecutionContext): AccessControlQueryBuilder =
-    AccessControlQueryBuilder(collection.find(wrapSelector(selector)))
+    AccessControlQueryBuilder(collection.find(Utils.wrapSelector(selector)))
 
   def stats(scale: Int)(implicit ec: ExecutionContext, ac: AccessContext): Future[CollStatsResult] = collection.stats(scale)(ec)
 
@@ -157,26 +183,26 @@ case class AccessControlCollection(name: String, failoverStrategy: FailoverStrat
   def insert(document: BSONDocument)(implicit ec: ExecutionContext, ac: AccessContext): Future[LastError] = insert(document, GetLastError())
 
   def remove[T](query: T, writeConcern: GetLastError, firstMatchOnly: Boolean)(implicit writer: BSONDocumentWriter[T], ec: ExecutionContext, ac: AccessContext): Future[LastError] =
-    collection.remove(wrapSelector(query), writeConcern, firstMatchOnly)
+    collection.remove(Utils.wrapSelector(query), writeConcern, firstMatchOnly)
 
   def save[T](doc: T, writeConcern: GetLastError)(implicit ec: ExecutionContext, writer: BSONDocumentWriter[T], ac: AccessContext): Future[LastError] =
-    collection.save(wrapSelector(doc), writeConcern)
+    collection.save(Utils.wrapSelector(doc), writeConcern)
 
   def save(doc: BSONDocument, writeConcern: GetLastError)(implicit ec: ExecutionContext, ac: AccessContext): Future[LastError] =
-    collection.save(wrapSelector(doc), writeConcern)
+    collection.save(Utils.wrapSelector(doc), writeConcern)
 
   def save(doc: BSONDocument)(implicit ec: ExecutionContext, ac: AccessContext): Future[LastError] =
-    collection.save(wrapSelector(doc))
+    collection.save(Utils.wrapSelector(doc))
 
   def uncheckedInsert[T](document: T)(implicit writer: BSONDocumentWriter[T], ac: AccessContext): Unit =
-    collection.uncheckedInsert(wrapSelector(document))
+    collection.uncheckedInsert(Utils.wrapSelector(document))
 
   def uncheckedRemove[T](query: T, firstMatchOnly: Boolean)(implicit writer: BSONDocumentWriter[T], ec: ExecutionContext, ac: AccessContext): Unit =
-    collection.uncheckedRemove(wrapSelector(query), firstMatchOnly)
+    collection.uncheckedRemove(Utils.wrapSelector(query), firstMatchOnly)
 
   def uncheckedUpdate[S, U](selector: S, update: U, upsert: Boolean, multi: Boolean)(implicit selectorWriter: BSONDocumentWriter[S], updateWriter: BSONDocumentWriter[U], ac: AccessContext): Unit =
-    collection.uncheckedUpdate(wrapSelector(selector), wrapUpdate(update), upsert, multi)
+    collection.uncheckedUpdate(Utils.wrapSelector(selector), Utils.wrapUpdate(update), upsert, multi)
 
   def update[S, U](selector: S, update: U, writeConcern: GetLastError = GetLastError(), upsert: Boolean = false, multi: Boolean = false)(implicit selectorWriter: BSONDocumentWriter[S], updateWriter: BSONDocumentWriter[U], ec: ExecutionContext, ac: AccessContext): Future[LastError] =
-    collection.update(wrapSelector(selector), wrapUpdate(update), writeConcern, upsert, multi)
+    collection.update(Utils.wrapSelector(selector), Utils.wrapUpdate(update), writeConcern, upsert, multi)
 }
