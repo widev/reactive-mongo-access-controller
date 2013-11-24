@@ -53,8 +53,7 @@ object Wrapper {
       case (_, value: BSONDocument) => isOperands(value)
       case _ => false
     }
-    if (!isOperands(document)) wrapExternalQuery(BSONDocument("$set" -> document))
-    else wrapExternalQuery(update)
+    if (!isOperands(document)) BSONDocument("$set" -> BSONDocument("model" -> document)) else wrapExternalQuery(update)
   }
 
   private[accesscontroller] def documentToAccessControl[T](document: T)(implicit ec: ExecutionContext, writer: BSONDocumentWriter[T], ac: AccessContext): AccessControl = {
