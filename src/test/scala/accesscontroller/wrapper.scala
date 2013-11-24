@@ -68,6 +68,8 @@ class WrapperTest extends TestKit(ActorSystem("Sessions")) with WordSpecLike wit
         Await.result(collection.find(model).cursor[TestModel].headOption, 1 second).get must be(model)
       }
 
+//      Await.result(collection.)
+
     }
 
   }

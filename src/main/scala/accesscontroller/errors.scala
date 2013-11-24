@@ -1,6 +1,7 @@
 package accesscontroller
 
-import reactivemongo.bson.BSONDocument
+import reactivemongo.bson.{BSONDocumentWriter, BSONDocument}
+
 
 trait AccessControllerException extends Exception {
   val message: String
@@ -8,20 +9,11 @@ trait AccessControllerException extends Exception {
   override def getMessage: String = "AccessControllerError['" + message + "']"
 }
 
-object AccessControllerException {
-  def apply[M <: ModelIdentity](model: M): AccessControllerException = WriteAccessException[M](model)
-  def apply(query: BSONDocument): AccessControllerException = ReadAccessException(query)
-}
-
-case class WriteAccessException[M <: ModelIdentity](model: M) extends AccessControllerException {
-  val message: String = "couldn't write the model with this id:'" + model.id.stringify + "'"
-}
-
-case class ReadAccessException(query: BSONDocument) extends AccessControllerException {
-  val message: String = "couldn't read the result of this query:'" + query.toString() + "'"
-}
-
 case class InternalAccessException(message: String = "Internal access error") extends AccessControllerException
+
+case class NoWriteAccessOnSelectedDataException[T](query: T)(implicit writer: BSONDocumentWriter[T]) extends AccessControllerException {
+  val message = s"The query [${BSONDocument.pretty(writer.write(query))}] selected only documents on which you can't write."
+}
 
 case class NoMatchingUserException(user: String = "") extends AccessControllerException {
   val message = s"No matching user" + (if (user.length > 0) s" [$user]" else "") + "."

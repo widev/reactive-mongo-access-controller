@@ -10,8 +10,6 @@ import reactivemongo.api.collections.default.BSONCollection
 import scala.collection.generic.CanBuildFrom
 import reactivemongo.api.indexes.{IndexType, Index}
 import scala.concurrent.duration._
-import scala.util.parsing.input.Reader
-import java.io.Writer
 
 object DB {
   def apply(name: String, failoverStrategy: FailoverStrategy = Store.db.failoverStrategy): AccessControlCollection = collection(name, failoverStrategy)
@@ -23,7 +21,7 @@ object Rights extends Enumeration {
   val read, write, none = Value
 }
 
-object Utils {
+object Wrapper {
   private[accesscontroller] def wrapExternalQuery[S](query: S)(implicit writer: BSONDocumentWriter[S]): BSONDocument = {
     def wrap(document: BSONDocument): BSONDocument =
       BSONDocument(document.elements.toTraversable.map {
@@ -33,7 +31,7 @@ object Utils {
     wrap(writer.write(query))
   }
 
-  private[accesscontroller] def wrapSelector[S](selector: S)(implicit writer: BSONDocumentWriter[S], ac: AccessContext): BSONDocument = {
+  private[accesscontroller] def wrapSelectorForReading[S](selector: S)(implicit writer: BSONDocumentWriter[S], ac: AccessContext): BSONDocument = {
     val ids = BSONArray(ac.user.groups + ac.user._id)
     wrapExternalQuery(selector) ++ BSONDocument(
       "$or" -> BSONArray(
@@ -42,8 +40,29 @@ object Utils {
       )
     )
   }
+  
+  private[accesscontroller] def wrapSelectorForWriting[S](selector: S)(implicit writer: BSONDocumentWriter[S], ac: AccessContext): BSONDocument = {
+    val ids = BSONArray(ac.user.groups + ac.user._id)
+    wrapExternalQuery(selector) ++ BSONDocument("accessLists.writers" -> BSONDocument("$all" -> ids))
+  }
 
   private[accesscontroller] def wrapUpdate[U](update: U)(implicit writer: BSONDocumentWriter[U]): BSONDocument = wrapExternalQuery(update)
+
+  private[accesscontroller] def documentToAccessControl[T](document: T)(implicit ec: ExecutionContext, writer: BSONDocumentWriter[T], ac: AccessContext): AccessControl = {
+    val doc = writer.write(document)
+    val tryId = doc.getAsTry[BSONObjectID]("_id")
+    AccessControl(
+      model = if (tryId.isFailure) doc ++ BSONDocument("_id" -> BSONObjectID.generate) else doc,
+      accessLists = AccessControlLists(writers = Set(ac.user._id))
+    )
+  }
+
+  private[accesscontroller] def secureDocumentToAccessControl[T](document: T)(implicit ec: ExecutionContext, writer: BSONDocumentWriter[T], ac: AccessContext): Future[AccessControl] =
+    Users.checkUsers(Set(ac.user._id)).flatMap {
+      case true => Future.successful(documentToAccessControl(document))
+      case _ => Future.failed(NoMatchingUserException(ac.user._id.stringify))
+    }
+
 }
 
 sealed case class AccessControlCursor[T](cursor: Cursor[AccessControl])(implicit reader: BSONDocumentReader[T]) {
@@ -86,17 +105,17 @@ sealed case class AccessControlQueryBuilder(queryBuilder: GenericQueryBuilder[BS
 
   def one[T](readPreference: ReadPreference)(implicit reader: BSONDocumentReader[T], ec: ExecutionContext): Future[Option[T]] = cursor(readPreference)(reader, ec).headOption
 
-  def query[Qry](selector: Qry)(implicit writer: BSONDocumentWriter[Qry], ac: AccessContext): AccessControlQueryBuilder = copy(queryBuilder.query(Utils.wrapSelector(selector)))
+  def query[Qry](selector: Qry)(implicit writer: BSONDocumentWriter[Qry], ac: AccessContext): AccessControlQueryBuilder = copy(queryBuilder.query(Wrapper.wrapSelectorForReading(selector)))
 
-  def sort(document: BSONDocument): AccessControlQueryBuilder = copy(queryBuilder.sort(Utils.wrapUpdate(document)))
+  def sort(document: BSONDocument): AccessControlQueryBuilder = copy(queryBuilder.sort(Wrapper.wrapUpdate(document)))
 
   def options(options: QueryOpts): AccessControlQueryBuilder = copy(queryBuilder.options(options))
 
-  def projection[Pjn](p: Pjn)(implicit writer: BSONDocumentWriter[Pjn], ac: AccessContext): AccessControlQueryBuilder = copy(queryBuilder.projection(Utils.wrapUpdate(p)))
+  def projection[Pjn](p: Pjn)(implicit writer: BSONDocumentWriter[Pjn], ac: AccessContext): AccessControlQueryBuilder = copy(queryBuilder.projection(Wrapper.wrapUpdate(p)))
 
-  def projection(p: BSONDocument, ac: AccessContext): AccessControlQueryBuilder = copy(queryBuilder.projection(Utils.wrapUpdate(p)))
+  def projection(p: BSONDocument, ac: AccessContext): AccessControlQueryBuilder = copy(queryBuilder.projection(Wrapper.wrapUpdate(p)))
 
-  def hint(document: BSONDocument): AccessControlQueryBuilder = copy(queryBuilder.hint(Utils.wrapUpdate(document)))
+  def hint(document: BSONDocument): AccessControlQueryBuilder = copy(queryBuilder.hint(Wrapper.wrapUpdate(document)))
 
   def snapshot(flag: Boolean = true): AccessControlQueryBuilder = copy(queryBuilder.snapshot(flag))
 
@@ -112,7 +131,7 @@ case class AccessControlCollection(name: String, failoverStrategy: FailoverStrat
   }
 
   private def setRights[S, U](selector: S, id: BSONObjectID, rights: Rights.Value)(implicit swriter: BSONDocumentWriter[S], ec: ExecutionContext, ac: AccessContext) =
-    collection.update(Utils.wrapSelector(selector),
+    collection.update(Wrapper.wrapSelectorForWriting(selector),
       rights match {
         case Rights.read =>
           BSONDocument("$addToSet" -> BSONDocument("accessLists.readers" -> id), "$pull" -> BSONDocument("accessLists.writers" -> id))
@@ -120,7 +139,10 @@ case class AccessControlCollection(name: String, failoverStrategy: FailoverStrat
           BSONDocument("$addToSet" -> BSONDocument("accessLists.writers" -> id), "$pull" -> BSONDocument("accessLists.readers" -> id))
         case _ =>
           BSONDocument("$pull" -> BSONDocument("accessLists.readers" -> id), "$pull" -> BSONDocument("accessLists.writers" -> id))
-      }).flatMap { _ => Future.successful() }
+      }).flatMap {
+      case result if result.updated > 0 => Future.successful()
+      case _ => Future.failed(NoWriteAccessOnSelectedDataException(selector))
+    }
 
   def setUserRights[S, U](selector: S, userId: BSONObjectID, rights: Rights.Value)(implicit swriter: BSONDocumentWriter[S], ac: AccessContext, ec: ExecutionContext): Future[Unit] =
     Users.checkUsers(Set(userId)).flatMap {
@@ -138,30 +160,15 @@ case class AccessControlCollection(name: String, failoverStrategy: FailoverStrat
 //    collection.find(wrapSelector(swriter.write(selector)), pwriter.write(projection))
 
   def find[S](selector: S)(implicit swriter: BSONDocumentWriter[S], ac: AccessContext, ec: ExecutionContext): AccessControlQueryBuilder =
-    AccessControlQueryBuilder(collection.find(Utils.wrapSelector(selector)))
+    AccessControlQueryBuilder(collection.find(Wrapper.wrapSelectorForReading(selector)))
 
-  def stats(scale: Int)(implicit ec: ExecutionContext, ac: AccessContext): Future[CollStatsResult] = collection.stats(scale)(ec)
+  def stats(scale: Int)(implicit ec: ExecutionContext): Future[CollStatsResult] = collection.stats(scale)
 
-  def stats()(implicit ec: ExecutionContext, ac: AccessContext): Future[CollStatsResult] = collection.stats()(ec)
-
-  private def documentToAccessControl[T](document: T)(implicit ec: ExecutionContext, writer: BSONDocumentWriter[T], ac: AccessContext): AccessControl = {
-    val doc = writer.write(document)
-    val tryId = doc.getAsTry[BSONObjectID]("_id")
-    AccessControl(
-      model = if (tryId.isFailure) doc ++ BSONDocument("_id" -> BSONObjectID.generate) else doc,
-      accessLists = AccessControlLists(writers = Set(ac.user._id))
-    )
-  }
-
-  private def secureDocumentToAccessControl[T](document: T)(implicit ec: ExecutionContext, writer: BSONDocumentWriter[T], ac: AccessContext): Future[AccessControl] =
-    Users.checkUsers(Set(ac.user._id)).flatMap {
-      case true => Future.successful(documentToAccessControl(document))
-      case _ => Future.failed(NoMatchingUserException(ac.user._id.stringify))
-    }
+  def stats()(implicit ec: ExecutionContext): Future[CollStatsResult] = collection.stats()
 
   def bulkInsert[T](enumerator: Enumerator[T], bulkSize: Int, bulkByteSize: Int)(implicit writer: BSONDocumentWriter[T], ec: ExecutionContext, ac: AccessContext): Future[Int] =
     Users.checkUsers(Set(ac.user._id)).flatMap {
-      case true => collection.bulkInsert(enumerator.through[AccessControl](Enumeratee.map[T] { el => documentToAccessControl(el) }), bulkSize, bulkByteSize)
+      case true => collection.bulkInsert(enumerator.through[AccessControl](Enumeratee.map[T] { el => Wrapper.documentToAccessControl(el) }), bulkSize, bulkByteSize)
       case _ => Future.failed(NoMatchingUserException(ac.user._id.stringify))
     }
 
@@ -171,38 +178,52 @@ case class AccessControlCollection(name: String, failoverStrategy: FailoverStrat
 //    }
 
   def insert[T](document: T, writeConcern: GetLastError = GetLastError())(implicit writer: BSONDocumentWriter[T], ec: ExecutionContext, ac: AccessContext): Future[LastError] =
-    secureDocumentToAccessControl(document).flatMap { accessControl =>
+    Wrapper.secureDocumentToAccessControl(document).flatMap { accessControl =>
       collection.insert(accessControl, writeConcern)
     }
 
   def insert(document: BSONDocument, writeConcern: GetLastError)(implicit ec: ExecutionContext, ac: AccessContext): Future[LastError] =
-    secureDocumentToAccessControl(document).flatMap { accessControl =>
+    Wrapper.secureDocumentToAccessControl(document).flatMap { accessControl =>
       collection.insert(accessControl, writeConcern)
     }
 
   def insert(document: BSONDocument)(implicit ec: ExecutionContext, ac: AccessContext): Future[LastError] = insert(document, GetLastError())
 
   def remove[T](query: T, writeConcern: GetLastError, firstMatchOnly: Boolean)(implicit writer: BSONDocumentWriter[T], ec: ExecutionContext, ac: AccessContext): Future[LastError] =
-    collection.remove(Utils.wrapSelector(query), writeConcern, firstMatchOnly)
+    collection.remove(Wrapper.wrapSelectorForWriting(query), writeConcern, firstMatchOnly).flatMap {
+      case result if result.updated > 0 => Future.successful(result)
+      case _ => Future.failed(NoWriteAccessOnSelectedDataException(query))
+    }
 
   def save[T](doc: T, writeConcern: GetLastError)(implicit ec: ExecutionContext, writer: BSONDocumentWriter[T], ac: AccessContext): Future[LastError] =
-    collection.save(Utils.wrapSelector(doc), writeConcern)
+    Wrapper.secureDocumentToAccessControl(doc).flatMap { accessControl =>
+      collection.save(accessControl, writeConcern)
+    }
 
   def save(doc: BSONDocument, writeConcern: GetLastError)(implicit ec: ExecutionContext, ac: AccessContext): Future[LastError] =
-    collection.save(Utils.wrapSelector(doc), writeConcern)
+    Wrapper.secureDocumentToAccessControl(doc).flatMap { accessControl =>
+      collection.save(accessControl, writeConcern)
+    }
 
   def save(doc: BSONDocument)(implicit ec: ExecutionContext, ac: AccessContext): Future[LastError] =
-    collection.save(Utils.wrapSelector(doc))
+    Wrapper.secureDocumentToAccessControl(doc).flatMap { accessControl =>
+      collection.save(accessControl)
+    }
 
-  def uncheckedInsert[T](document: T)(implicit writer: BSONDocumentWriter[T], ac: AccessContext): Unit =
-    collection.uncheckedInsert(Utils.wrapSelector(document))
+  def uncheckedInsert[T](document: T)(implicit writer: BSONDocumentWriter[T], ec: ExecutionContext, ac: AccessContext): Unit =
+    Wrapper.secureDocumentToAccessControl(document).foreach { accessControl =>
+      collection.uncheckedInsert(accessControl)
+    }
 
   def uncheckedRemove[T](query: T, firstMatchOnly: Boolean)(implicit writer: BSONDocumentWriter[T], ec: ExecutionContext, ac: AccessContext): Unit =
-    collection.uncheckedRemove(Utils.wrapSelector(query), firstMatchOnly)
+    collection.uncheckedRemove(Wrapper.wrapSelectorForWriting(query), firstMatchOnly)
 
   def uncheckedUpdate[S, U](selector: S, update: U, upsert: Boolean, multi: Boolean)(implicit selectorWriter: BSONDocumentWriter[S], updateWriter: BSONDocumentWriter[U], ac: AccessContext): Unit =
-    collection.uncheckedUpdate(Utils.wrapSelector(selector), Utils.wrapUpdate(update), upsert, multi)
+    collection.uncheckedUpdate(Wrapper.wrapSelectorForWriting(selector), Wrapper.wrapUpdate(update), upsert, multi)
 
   def update[S, U](selector: S, update: U, writeConcern: GetLastError = GetLastError(), upsert: Boolean = false, multi: Boolean = false)(implicit selectorWriter: BSONDocumentWriter[S], updateWriter: BSONDocumentWriter[U], ec: ExecutionContext, ac: AccessContext): Future[LastError] =
-    collection.update(Utils.wrapSelector(selector), Utils.wrapUpdate(update), writeConcern, upsert, multi)
+    collection.update(Wrapper.wrapSelectorForWriting(selector), Wrapper.wrapUpdate(update), writeConcern, upsert, multi).flatMap {
+      case result if result.updated > 0 => Future.successful(result)
+      case _ => Future.failed(NoWriteAccessOnSelectedDataException(selector))
+    }
 }

@@ -4,10 +4,6 @@ import reactivemongo.bson._
 import org.joda.time.DateTime
 import com.typesafe.config.ConfigFactory
 
-trait ModelIdentity {
-  val id: BSONObjectID
-}
-
 case class AccessControlLists(readers: Set[BSONObjectID] = Set(), writers: Set[BSONObjectID] = Set())
 
 object AccessControlLists {
