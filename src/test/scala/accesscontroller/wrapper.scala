@@ -42,7 +42,7 @@ class WrapperTest extends TestKit(ActorSystem("Sessions")) with WordSpecLike wit
 
     }
 
-    "wrap a test model and insert it, then find it" in {
+    "wrap a test model and insert it, then find it, update it and delete it" in {
       val model = TestModel()
       Await.result(collection.insert(model), 1 second).ok must be(right = true)
 
@@ -68,7 +68,19 @@ class WrapperTest extends TestKit(ActorSystem("Sessions")) with WordSpecLike wit
         Await.result(collection.find(model).cursor[TestModel].headOption, 1 second).get must be(model)
       }
 
-//      Await.result(collection.)
+      Await.result(collection.update(BSONDocument("_id" -> model._id), BSONDocument("$set" -> BSONDocument("test" -> false))), 1 second).ok must be(right = true)
+
+      intercept[NoWriteAccessOnSelectedDataException[BSONDocument]] {
+        implicit val ac = AccessContext(user1, None)
+        Await.result(collection.update(BSONDocument("_id" -> model._id), BSONDocument("$set" -> BSONDocument("test" -> true))), 1 second).ok must be(right = true)
+      }
+
+      intercept[NoWriteAccessOnSelectedDataException[BSONDocument]] {
+        implicit val ac = AccessContext(user1, None)
+        Await.result(collection.remove(BSONDocument("_id" -> model._id)), 1 second)
+      }
+
+      Await.result(collection.remove(BSONDocument("_id" -> model._id)), 1 second).ok must be(right = true)
 
     }
 

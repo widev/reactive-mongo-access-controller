@@ -189,7 +189,7 @@ case class AccessControlCollection(name: String, failoverStrategy: FailoverStrat
 
   def insert(document: BSONDocument)(implicit ec: ExecutionContext, ac: AccessContext): Future[LastError] = insert(document, GetLastError())
 
-  def remove[T](query: T, writeConcern: GetLastError, firstMatchOnly: Boolean)(implicit writer: BSONDocumentWriter[T], ec: ExecutionContext, ac: AccessContext): Future[LastError] =
+  def remove[T](query: T, writeConcern: GetLastError = GetLastError(), firstMatchOnly: Boolean = false)(implicit writer: BSONDocumentWriter[T], ec: ExecutionContext, ac: AccessContext): Future[LastError] =
     collection.remove(Wrapper.wrapSelectorForWriting(query), writeConcern, firstMatchOnly).flatMap {
       case result if result.updated > 0 => Future.successful(result)
       case _ => Future.failed(NoWriteAccessOnSelectedDataException(query))
