@@ -46,7 +46,16 @@ object Wrapper {
     wrapExternalQuery(selector) ++ BSONDocument("accessLists.writers" -> BSONDocument("$all" -> ids))
   }
 
-  private[accesscontroller] def wrapUpdate[U](update: U)(implicit writer: BSONDocumentWriter[U]): BSONDocument = wrapExternalQuery(update)
+  private[accesscontroller] def wrapUpdate[U](update: U)(implicit writer: BSONDocumentWriter[U]): BSONDocument = {
+    val document = writer.write(update)
+    def isOperands(doc: BSONDocument): Boolean = doc.elements.toTraversable.exists {
+      case (key, _) if key(0) == '$' => true
+      case (_, value: BSONDocument) => isOperands(value)
+      case _ => false
+    }
+    if (!isOperands(document)) wrapExternalQuery(BSONDocument("$set" -> document))
+    else wrapExternalQuery(update)
+  }
 
   private[accesscontroller] def documentToAccessControl[T](document: T)(implicit ec: ExecutionContext, writer: BSONDocumentWriter[T], ac: AccessContext): AccessControl = {
     val doc = writer.write(document)
@@ -107,15 +116,15 @@ sealed case class AccessControlQueryBuilder(queryBuilder: GenericQueryBuilder[BS
 
   def query[Qry](selector: Qry)(implicit writer: BSONDocumentWriter[Qry], ac: AccessContext): AccessControlQueryBuilder = copy(queryBuilder.query(Wrapper.wrapSelectorForReading(selector)))
 
-  def sort(document: BSONDocument): AccessControlQueryBuilder = copy(queryBuilder.sort(Wrapper.wrapUpdate(document)))
+  def sort(document: BSONDocument): AccessControlQueryBuilder = copy(queryBuilder.sort(Wrapper.wrapExternalQuery(document)))
 
   def options(options: QueryOpts): AccessControlQueryBuilder = copy(queryBuilder.options(options))
 
-  def projection[Pjn](p: Pjn)(implicit writer: BSONDocumentWriter[Pjn], ac: AccessContext): AccessControlQueryBuilder = copy(queryBuilder.projection(Wrapper.wrapUpdate(p)))
+  def projection[Pjn](p: Pjn)(implicit writer: BSONDocumentWriter[Pjn], ac: AccessContext): AccessControlQueryBuilder = copy(queryBuilder.projection(Wrapper.wrapExternalQuery(p)))
 
-  def projection(p: BSONDocument, ac: AccessContext): AccessControlQueryBuilder = copy(queryBuilder.projection(Wrapper.wrapUpdate(p)))
+  def projection(p: BSONDocument, ac: AccessContext): AccessControlQueryBuilder = copy(queryBuilder.projection(Wrapper.wrapExternalQuery(p)))
 
-  def hint(document: BSONDocument): AccessControlQueryBuilder = copy(queryBuilder.hint(Wrapper.wrapUpdate(document)))
+  def hint(document: BSONDocument): AccessControlQueryBuilder = copy(queryBuilder.hint(Wrapper.wrapExternalQuery(document)))
 
   def snapshot(flag: Boolean = true): AccessControlQueryBuilder = copy(queryBuilder.snapshot(flag))
 

@@ -68,11 +68,12 @@ class WrapperTest extends TestKit(ActorSystem("Sessions")) with WordSpecLike wit
         Await.result(collection.find(model).cursor[TestModel].headOption, 1 second).get must be(model)
       }
 
-      Await.result(collection.update(BSONDocument("_id" -> model._id), BSONDocument("$set" -> BSONDocument("test" -> false))), 1 second).ok must be(right = true)
+      Await.result(collection.update(BSONDocument("_id" -> model._id), model.copy(test = false)), 1 second).ok must be(right = true)
+      Await.result(collection.find(BSONDocument("_id" -> model._id)).cursor[TestModel].headOption, 1 second).get.test must be(right = false)
 
       intercept[NoWriteAccessOnSelectedDataException[BSONDocument]] {
         implicit val ac = AccessContext(user1, None)
-        Await.result(collection.update(BSONDocument("_id" -> model._id), BSONDocument("$set" -> BSONDocument("test" -> true))), 1 second).ok must be(right = true)
+        Await.result(collection.update(BSONDocument("_id" -> model._id), model.copy(test = false)), 1 second).ok must be(right = true)
       }
 
       intercept[NoWriteAccessOnSelectedDataException[BSONDocument]] {
