@@ -8,6 +8,7 @@ import scala.concurrent.duration._
 import reactivemongo.bson.BSONObjectID
 import org.joda.time.DateTime
 import play.api.libs.iteratee.Iteratee
+import scala.tools.nsc.interpreter.session
 
 class SessionsTest extends TestKit(ActorSystem("Sessions")) with WordSpecLike with MustMatchers with TestUtils {
   implicit val ec = system.dispatcher
@@ -224,7 +225,7 @@ class UserGroupsTest extends TestKit(ActorSystem("UserGroups")) with WordSpecLik
   }
 
   "createGroup (from access context) method" must {
-    implicit val ac = AccessContext(owner, None)
+    implicit val ac = AccessContext(owner, Some(randomSession))
 
     "return the created user group and the updated access context" in {
       val result = Await.result(access.userGroups.createUserGroup(Session.token(), userGroup.users), 1 second)
@@ -247,7 +248,7 @@ class UserGroupsTest extends TestKit(ActorSystem("UserGroups")) with WordSpecLik
   val notOwnerUser = createRandomUsers(1)(ec)(0)
 
   "putUserInUserGroup method" must {
-    implicit val ac = AccessContext(owner, None)
+    implicit val ac = AccessContext(owner, Some(randomSession))
 
     "return the updated user group" in {
       val result = Await.result(access.userGroups.putUserInUserGroup(userGroup._id, userToPutInGroup._id), 1 second)
@@ -256,7 +257,7 @@ class UserGroupsTest extends TestKit(ActorSystem("UserGroups")) with WordSpecLik
     }
 
     "fail with NoWriteAccessOnUserGroupException" in {
-      implicit val ac = AccessContext(notOwnerUser, None)
+      implicit val ac = AccessContext(notOwnerUser, Some(randomSession))
       intercept[NoWriteAccessOnUserGroupException] {
         Await.result(access.userGroups.putUserInUserGroup(userGroup._id, userToPutInGroup._id), 1 second)
       }
@@ -283,7 +284,7 @@ class UserGroupsTest extends TestKit(ActorSystem("UserGroups")) with WordSpecLik
   val usersToPutInGroup = createRandomUsers(10)
 
   "putUsersInUserGroup method" must {
-    implicit val ac = AccessContext(owner, None)
+    implicit val ac = AccessContext(owner, Some(randomSession))
 
     "return the updated user group" in {
       val result = Await.result(access.userGroups.putUsersInUserGroup(userGroup._id, Set(usersToPutInGroup.map(_._id):_*)), 1 second)
@@ -292,7 +293,7 @@ class UserGroupsTest extends TestKit(ActorSystem("UserGroups")) with WordSpecLik
   }
 
   "deleteUserFromUserGroup method" must {
-    implicit val ac = AccessContext(owner, None)
+    implicit val ac = AccessContext(owner, Some(randomSession))
 
     "return the updated user group" in {
       val result = Await.result(access.userGroups.deleteUserFromUserGroup(userGroup._id, userToPutInGroup._id), 1 second)
@@ -322,7 +323,7 @@ class UserGroupsTest extends TestKit(ActorSystem("UserGroups")) with WordSpecLik
   }
 
   "deleteUsersFromUserGroup method" must {
-    implicit val ac = AccessContext(owner, None)
+    implicit val ac = AccessContext(owner, Some(randomSession))
 
     "return the updated user group" in {
       val result = Await.result(access.userGroups.deleteUsersFromUserGroup(userGroup._id, Set(usersToPutInGroup.map(_._id):_*)), 1 second)
@@ -331,7 +332,7 @@ class UserGroupsTest extends TestKit(ActorSystem("UserGroups")) with WordSpecLik
   }
 
   "putUserGroupOwner method" must {
-    implicit val ac = AccessContext(owner, None)
+    implicit val ac = AccessContext(owner, Some(randomSession))
 
     "return the new user group" in {
       val result = Await.result(access.userGroups.putUserGroupOwner(userGroup._id, notOwnerUser._id), 1 second)
@@ -339,17 +340,17 @@ class UserGroupsTest extends TestKit(ActorSystem("UserGroups")) with WordSpecLik
     }
 
     "switch the owners and return the new user group" in {
-      implicit val ac = AccessContext(notOwnerUser, None)
+      implicit val ac = AccessContext(notOwnerUser, Some(randomSession))
       val result = Await.result(access.userGroups.putUserGroupOwner(userGroup._id, owner._id), 1 second)
       result.ownerId must be(owner._id)
     }
   }
 
   "deleteUserGroup method" must {
-    implicit val ac = AccessContext(owner, None)
+    implicit val ac = AccessContext(owner, Some(randomSession))
 
     "fail with NoWriteAccessOnUserGroupException" in {
-      implicit val ac = AccessContext(notOwnerUser, None)
+      implicit val ac = AccessContext(notOwnerUser, Some(randomSession))
       intercept[NoWriteAccessOnUserGroupException] {
         Await.result(access.userGroups.deleteUserGroup(userGroup._id), 1 second)
       }
@@ -360,7 +361,7 @@ class UserGroupsTest extends TestKit(ActorSystem("UserGroups")) with WordSpecLik
     }
 
     "fail with NoMatchingUserGroupException" in {
-      implicit val ac = AccessContext(notOwnerUser, None)
+      implicit val ac = AccessContext(notOwnerUser, Some(randomSession))
       intercept[NoMatchingUserGroupException] {
         Await.result(access.userGroups.deleteUserGroup(userGroup._id), 1 second)
       }

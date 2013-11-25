@@ -3,6 +3,7 @@ package accesscontroller
 import reactivemongo.bson._
 import org.joda.time.DateTime
 import com.typesafe.config.ConfigFactory
+import scala.concurrent.Future
 
 case class AccessControlLists(readers: Set[BSONObjectID] = Set(), writers: Set[BSONObjectID] = Set())
 
@@ -66,4 +67,16 @@ object User {
   implicit val Handler = Macros.handler[User]
 }
 
-case class AccessContext(user: User, session: Option[Session])
+case class AccessContext(user: User, session: Option[Session], private val checked: Boolean = false) {
+  private[accesscontroller] def checkSync[R](then:(AccessContext) => R): R = (checked, session) match {
+    case (_, None) => throw NotValidAccessContextException()
+    case (false, Some(s)) if s.expirationDate.isBeforeNow => throw ExpiredSessionException(s.token)
+    case _ => then(this.copy(session = Some(session.get.copy(expirationDate = DateTime.now().plusSeconds(Session.config.getInt("ttl")))), checked = true))
+  }
+
+  private[accesscontroller] def check[R](then:(AccessContext) => Future[R]): Future[R] = (checked, session) match {
+    case (_, None) => Future.failed(NotValidAccessContextException())
+    case (false, Some(s)) if s.expirationDate.isBeforeNow => Future.failed(ExpiredSessionException(s.token))
+    case _ => then(this.copy(session = Some(session.get.copy(expirationDate = DateTime.now().plusSeconds(Session.config.getInt("ttl")))), checked = true))
+  }
+}

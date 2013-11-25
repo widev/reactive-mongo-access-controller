@@ -79,26 +79,28 @@ class Users(store: Store)(s: =>Sessions, ug: =>UserGroups)(implicit ec: Executio
       }
     }
 
-  def disconnectUser(implicit ac: AccessContext, ec: ExecutionContext): Future[AccessContext] = ac.session match {
-    case Some(session) => sessions.deleteSession(session.token).flatMap { _ =>
-      Future.successful { ac.copy(session = None) }
+  def disconnectUser(implicit ac: AccessContext, ec: ExecutionContext): Future[AccessContext] =
+    ac.check { implicit ac =>
+      sessions.deleteSession(ac.session.get.token).flatMap { _ =>
+        Future.successful { ac.copy(session = None) }
+      }
     }
-    case _ => Future.failed(NotValidAccessContextException())
-  }
 
   def deleteUser(implicit ac: AccessContext, ec: ExecutionContext): Future[Unit] =
-    getUser(ac.user._id).flatMap { user =>
-      Future.traverse(user.groups) { groupId =>
-        userGroups.deleteUserFromUserGroup(groupId, user._id).recover {
-          case _: OwnerCannotBeDeletedFromItsUserGroupException =>
-            userGroups.deleteUserGroup(groupId)
+    ac.check { implicit ac =>
+      getUser(ac.user._id).flatMap { user =>
+        Future.traverse(user.groups) { groupId =>
+          userGroups.deleteUserFromUserGroup(groupId, user._id).recover {
+            case _: OwnerCannotBeDeletedFromItsUserGroupException =>
+              userGroups.deleteUserGroup(groupId)
+          }
         }
+      }.flatMap { _ =>
+        for {
+          _ <- collection.remove(BSONDocument("_id" -> ac.user._id))
+          _ <- sessions.deleteSession
+        } yield {}
       }
-    }.flatMap { _ =>
-      for {
-        _ <- collection.remove(BSONDocument("_id" -> ac.user._id))
-        _ <- sessions.deleteSession
-      } yield {}
     }
 
   private[accesscontroller] def updateUsersUserGroupList(users: Set[BSONObjectID], groupId: BSONObjectID, opcode: String)(implicit ec: ExecutionContext): Future[Unit] =
@@ -171,13 +173,14 @@ class Sessions(store: Store)(u: =>Users)(implicit ec: ExecutionContext) {
       case _ => Future.failed(NoMatchingSessionException(token))
     }
 
-  def deleteSession(implicit ac: AccessContext, ec: ExecutionContext): Future[AccessContext] = ac.session match {
-    case Some(session) =>
-      deleteSession(session.token).flatMap { _ =>
+  def deleteSession(implicit ac: AccessContext, ec: ExecutionContext): Future[AccessContext] =
+    ac.session match {
+      case Some(session) =>
+        deleteSession(session.token).flatMap { _ =>
           Future.successful { ac.copy(session = None) }
-      }
-    case _ => Future.successful { ac }
-  }
+        }
+      case _ => Future.successful { ac }
+    }
 
   def deleteSession(token: String)(implicit ec: ExecutionContext): Future[Boolean] =
     collection.remove(BSONDocument("token" -> token)).flatMap {
@@ -215,8 +218,10 @@ class UserGroups(store: Store)(u: =>Users)(implicit ec: ExecutionContext) {
     }
 
   def createUserGroup(name: String, users: Set[BSONObjectID] = Set())(implicit ac: AccessContext, ec: ExecutionContext): Future[(UserGroup, AccessContext)] =
-    createUserGroup(UserGroup(ownerId = ac.user._id, name = name, users = users)).flatMap { userGroup =>
-      Future.successful(userGroup, ac.copy(user = ac.user.copy(groups = ac.user.groups + userGroup._id)))
+    ac.check { implicit ac =>
+      createUserGroup(UserGroup(ownerId = ac.user._id, name = name, users = users)).flatMap { userGroup =>
+        Future.successful(userGroup, ac.copy(user = ac.user.copy(groups = ac.user.groups + userGroup._id)))
+      }
     }
 
   def checkGroups(groups: Set[BSONObjectID])(implicit ec: ExecutionContext): Future[Boolean] =
@@ -226,28 +231,29 @@ class UserGroups(store: Store)(u: =>Users)(implicit ec: ExecutionContext) {
     }
 
   def putUserInUserGroup(groupId: BSONObjectID, userId: BSONObjectID)(implicit ac: AccessContext, ec: ExecutionContext): Future[UserGroup] =
-    putUsersInUserGroup(groupId, Set(userId))
+    ac.check { implicit ac => putUsersInUserGroup(groupId, Set(userId)) }
 
   private def updateUserGroupUsers(groupId: BSONObjectID, users: Set[BSONObjectID], opcode: String)(implicit ec: ExecutionContext) =
     collection.update(BSONDocument("_id" -> groupId), BSONDocument(opcode -> BSONDocument("users" -> BSONDocument("$each" -> users))))
 
-  def putUsersInUserGroup(groupId: BSONObjectID, userList: Set[BSONObjectID])(implicit ac: AccessContext, ec: ExecutionContext): Future[UserGroup] = {
-    val f1 = users.checkUsers(userList)
-    val f2 = getUserGroup(groupId)
-    f1.flatMap {
-      case true => f2.flatMap {
-        case group if group.ownerId == ac.user._id =>
-          for {
-            _ <- users.addUserGroupToUsers(userList, groupId)
-            _ <- updateUserGroupUsers(groupId, userList, "$addToSet")
-          } yield {
-            group.copy(users = group.users ++ userList)
-          }
-        case _ => Future.failed(NoWriteAccessOnUserGroupException(groupId.stringify, ac.user._id.stringify))
+  def putUsersInUserGroup(groupId: BSONObjectID, userList: Set[BSONObjectID])(implicit ac: AccessContext, ec: ExecutionContext): Future[UserGroup] =
+    ac.check { implicit ac =>
+      val f1 = users.checkUsers(userList)
+      val f2 = getUserGroup(groupId)
+      f1.flatMap {
+        case true => f2.flatMap {
+          case group if group.ownerId == ac.user._id =>
+            for {
+              _ <- users.addUserGroupToUsers(userList, groupId)
+              _ <- updateUserGroupUsers(groupId, userList, "$addToSet")
+            } yield {
+              group.copy(users = group.users ++ userList)
+            }
+          case _ => Future.failed(NoWriteAccessOnUserGroupException(groupId.stringify, ac.user._id.stringify))
+        }
+        case _ => Future.failed(NoMatchingUserException())
       }
-      case _ => Future.failed(NoMatchingUserException())
     }
-  }
 
   def deleteUserFromUserGroup(groupId: BSONObjectID, userId: BSONObjectID)(implicit ec: ExecutionContext): Future[UserGroup] =
     deleteUsersFromUserGroup(groupId, Set(userId))
@@ -269,29 +275,33 @@ class UserGroups(store: Store)(u: =>Users)(implicit ec: ExecutionContext) {
     }
 
   def deleteUserGroup(groupId: BSONObjectID)(implicit ac: AccessContext, ec: ExecutionContext): Future[Unit] =
-    getUserGroup(groupId).flatMap {
-      case group if group.ownerId == ac.user._id => {
-        for {
-          _ <- users.removeUserGroupFromUsers(group.members, groupId)
-          _ <- collection.remove(BSONDocument("_id" -> groupId))
-        } yield {}
-      }
-      case _ => Future.failed(NoWriteAccessOnUserGroupException(groupId.stringify, ac.user._id.stringify))
-    }
-
-  def putUserGroupOwner(groupId: BSONObjectID, userId: BSONObjectID)(implicit ac: AccessContext, ec: ExecutionContext): Future[UserGroup] = {
-    val f1 = users.getUser(userId)
-    val f2 = getUserGroup(groupId)
-    f1.flatMap { user =>
-      f2.flatMap {
-        case group if group.ownerId == ac.user._id && group.ownerId != userId =>
-          collection.update(BSONDocument("_id" -> groupId), BSONDocument("$set" -> BSONDocument("ownerId" -> userId))).map { _ =>
-            users.addUserGroupToUser(groupId)(ac.copy(user = user), ec)
-            group.copy(ownerId = userId)
-          }
-        case group if group.ownerId == userId => Future.successful(group)
+    ac.check { implicit ac =>
+      getUserGroup(groupId).flatMap {
+        case group if group.ownerId == ac.user._id => {
+          for {
+            _ <- users.removeUserGroupFromUsers(group.members, groupId)
+            _ <- collection.remove(BSONDocument("_id" -> groupId))
+          } yield {}
+        }
         case _ => Future.failed(NoWriteAccessOnUserGroupException(groupId.stringify, ac.user._id.stringify))
       }
     }
-  }
+
+  def putUserGroupOwner(groupId: BSONObjectID, userId: BSONObjectID)(implicit ac: AccessContext, ec: ExecutionContext): Future[UserGroup] =
+    ac.check { implicit ac =>
+      val f1 = users.getUser(userId)
+      val f2 = getUserGroup(groupId)
+      f1.flatMap { user =>
+        f2.flatMap {
+          case group if group.ownerId == ac.user._id && group.ownerId != userId =>
+            collection.update(BSONDocument("_id" -> groupId), BSONDocument("$set" -> BSONDocument("ownerId" -> userId))).map { _ =>
+              users.addUserGroupToUser(groupId)(ac.copy(user = user), ec)
+              group.copy(ownerId = userId)
+            }
+          case group if group.ownerId == userId => Future.successful(group)
+          case _ => Future.failed(NoWriteAccessOnUserGroupException(groupId.stringify, ac.user._id.stringify))
+        }
+      }
+    }
+
 }

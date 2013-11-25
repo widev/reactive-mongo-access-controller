@@ -23,7 +23,7 @@ class WrapperTest extends TestKit(ActorSystem("Sessions")) with WordSpecLike wit
   val user = createRandomUsers(1)(ec)(0)
   val user1 = createRandomUsers(1)(ec)(0)
 
-  implicit val ac = AccessContext(user, None)
+  implicit val ac = AccessContext(user, Some(randomSession))
 
 
   case class TestModel(_id: BSONObjectID = BSONObjectID.generate, test: Boolean = true)
@@ -62,14 +62,14 @@ class WrapperTest extends TestKit(ActorSystem("Sessions")) with WordSpecLike wit
       Await.result(collection.find(model).cursor[TestModel].collect[List](), 1 second) must be (List(model))
 
       {
-        implicit val ac = AccessContext(User(credentials = Credentials(Session.token(), Session.token())), None)
+        implicit val ac = AccessContext(User(credentials = Credentials(Session.token(), Session.token())), Some(randomSession))
         Await.result(collection.find(model).cursor[TestModel].collect[List](), 1 second).length must be(0)
       }
 
       Await.result(collection.setUserRights(model, user1._id, Rights.read), 1 second)
 
       {
-        implicit val ac = AccessContext(user1, None)
+        implicit val ac = AccessContext(user1, Some(randomSession))
         Await.result(collection.find(model).cursor[TestModel].headOption, 1 second).get must be(model)
       }
 
@@ -77,12 +77,12 @@ class WrapperTest extends TestKit(ActorSystem("Sessions")) with WordSpecLike wit
       Await.result(collection.find(BSONDocument("_id" -> model._id)).cursor[TestModel].headOption, 1 second).get.test must be(right = false)
 
       intercept[NoWriteAccessOnSelectedDataException[BSONDocument]] {
-        implicit val ac = AccessContext(user1, None)
+        implicit val ac = AccessContext(user1, Some(randomSession))
         Await.result(collection.update(BSONDocument("_id" -> model._id), model.copy(test = false)), 1 second).ok must be(right = true)
       }
 
       intercept[NoWriteAccessOnSelectedDataException[BSONDocument]] {
-        implicit val ac = AccessContext(user1, None)
+        implicit val ac = AccessContext(user1, Some(randomSession))
         Await.result(collection.remove(BSONDocument("_id" -> model._id)), 1 second)
       }
 

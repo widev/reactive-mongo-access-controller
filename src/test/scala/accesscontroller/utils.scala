@@ -2,7 +2,7 @@ package accesscontroller
 
 import reactivemongo.api.collections.default.BSONCollection
 import scala.concurrent.{Future, ExecutionContext, Await}
-import reactivemongo.bson.BSONDocument
+import reactivemongo.bson.{BSONObjectID, BSONDocument}
 import scala.concurrent.duration._
 
 trait TestUtils {
@@ -24,4 +24,6 @@ trait TestUtils {
 
   def connectUsers(users: List[User])(implicit ec: ExecutionContext): List[AccessContext] =
     Await.result(Future.traverse(users) { user => access.users.connectUser(user.credentials) }, 1 second)
+
+  def randomSession = Session(token = Session.token(), userId = BSONObjectID.generate)
 }
