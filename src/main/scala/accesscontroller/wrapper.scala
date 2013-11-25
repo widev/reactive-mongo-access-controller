@@ -7,8 +7,9 @@ import reactivemongo.api.collections.GenericQueryBuilder
 import play.api.libs.iteratee._
 import reactivemongo.api._
 import scala.collection.generic.CanBuildFrom
-import reactivemongo.api.indexes.IndexType
+import reactivemongo.api.indexes._
 import reactivemongo.api.indexes.Index
+import reactivemongo.api.indexes.NSIndex
 import scala.Some
 import reactivemongo.api.collections.default.BSONCollection
 import reactivemongo.core.commands.GetLastError
@@ -142,6 +143,31 @@ sealed case class AccessControlQueryBuilder(private val queryBuilder: GenericQue
   def snapshot(flag: Boolean = true): AccessControlQueryBuilder = copy(queryBuilder.snapshot(flag))
 
   def comment(message: String): AccessControlQueryBuilder = copy(queryBuilder.comment(message))
+}
+
+sealed case class AccessControllerIndexesManager(private val indexesManager: IndexesManager) {
+  private def wrapIndex(nsIndex: NSIndex) = nsIndex.copy(index = nsIndex.index.copy(key = nsIndex.index.key.map { case (k, t) => ("model." + k, t) }))
+
+  def list(implicit ec: ExecutionContext): Future[List[NSIndex]] = indexesManager.list().map { indexes =>
+    indexes.filter { nsIndex =>
+      if (nsIndex.index.key.count {
+        case (k, t) if k.startsWith("model.") => true
+        case _ => false
+      } != nsIndex.index.key.size)
+        true
+      else
+        false
+    }
+  }
+
+  def ensure(nsIndex: NSIndex): Future[Boolean] = indexesManager.ensure(wrapIndex(nsIndex))
+
+  def create(nsIndex: NSIndex): Future[LastError] = indexesManager.create(wrapIndex(nsIndex))
+
+  def delete(nsIndex: NSIndex): Future[Int] = indexesManager.delete(wrapIndex(nsIndex))
+
+  def delete(collectionName: String, indexName: String): Future[Int] = indexesManager.delete(collectionName, "model." + indexName)
+
 }
 
 case class AccessControlCollection(private val collection: BSONCollection)(users: Users, userGroups: UserGroups, sessions: Sessions) {
