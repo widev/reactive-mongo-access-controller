@@ -70,7 +70,7 @@ object Wrapper {
     if (!isOperands(document)) BSONDocument("$set" -> BSONDocument("model" -> document)) else wrapExternalQuery(update)
   }
 
-  private[accesscontroller] def documentToAccessControl[T](document: T)(implicit ec: ExecutionContext, writer: BSONDocumentWriter[T], ac: AccessContext): AccessControl = {
+  private[accesscontroller] def modelToAccessControl[T](document: T)(implicit ec: ExecutionContext, writer: BSONDocumentWriter[T], ac: AccessContext): AccessControl = {
     val doc = writer.write(document)
     val tryId = doc.getAsTry[BSONObjectID]("_id")
     AccessControl(
@@ -81,7 +81,7 @@ object Wrapper {
 
   private[accesscontroller] def secureDocumentToAccessControl[T](document: T)(users: Users)(implicit ec: ExecutionContext, writer: BSONDocumentWriter[T], ac: AccessContext): Future[AccessControl] =
     users.checkUsers(Set(ac.user._id)).flatMap {
-      case true => Future.successful(documentToAccessControl(document))
+      case true => Future.successful(modelToAccessControl(document))
       case _ => Future.failed(NoMatchingUserException(ac.user._id.stringify))
     }
 
@@ -180,8 +180,8 @@ case class AccessControlCollection(private val collection: BSONCollection)(users
       case _ => Future.failed(NoMatchingUserGroupException(userGroupId.stringify))
     }
 
-//  def find[S, P](selector: S, projection: P)(implicit swriter: BSONDocumentWriter[S], pwriter: BSONDocumentWriter[P], ac: AccessContext): GenericQueryBuilder[BSONDocument, BSONDocumentReader, BSONDocumentWriter] =
-//    collection.find(wrapSelector(swriter.write(selector)), pwriter.write(projection))
+  def find[S, P](selector: S, projection: P)(implicit swriter: BSONDocumentWriter[S], pwriter: BSONDocumentWriter[P], ac: AccessContext): GenericQueryBuilder[BSONDocument, BSONDocumentReader, BSONDocumentWriter] =
+    collection.find(Wrapper.wrapSelectorForReading(selector), Wrapper.wrapExternalQuery(projection))
 
   def find[S](selector: S)(implicit swriter: BSONDocumentWriter[S], ac: AccessContext, ec: ExecutionContext): AccessControlQueryBuilder =
     AccessControlQueryBuilder(collection.find(Wrapper.wrapSelectorForReading(selector)))
@@ -192,14 +192,12 @@ case class AccessControlCollection(private val collection: BSONCollection)(users
 
   def bulkInsert[T](enumerator: Enumerator[T], bulkSize: Int, bulkByteSize: Int)(implicit writer: BSONDocumentWriter[T], ec: ExecutionContext, ac: AccessContext): Future[Int] =
     users.checkUsers(Set(ac.user._id)).flatMap {
-      case true => collection.bulkInsert(enumerator.through[AccessControl](Enumeratee.map[T] { el => Wrapper.documentToAccessControl(el) }), bulkSize, bulkByteSize)
+      case true => collection.bulkInsert(enumerator.through[AccessControl](Enumeratee.map[T] { el => Wrapper.modelToAccessControl(el) }), bulkSize, bulkByteSize)
       case _ => Future.failed(NoMatchingUserException(ac.user._id.stringify))
     }
 
-  def bulkInsertIteratee[T](bulkSize: Int, bulkByteSize: Int)(implicit writer: BSONDocumentWriter[T], ec: ExecutionContext, ac: AccessContext): Iteratee[T, Int] = ???
-//    collection.bulkInsertIteratee[AccessControl](bulkSize, bulkByteSize).pureFlatFold { (accessControl: AccessControl, i: Int) =>
-//      accessControl.model
-//    }
+  def bulkInsertIteratee[T](bulkSize: Int, bulkByteSize: Int)(implicit writer: BSONDocumentWriter[T], ec: ExecutionContext, ac: AccessContext): Iteratee[T, Int] =
+    Enumeratee.map { model: T => Wrapper.modelToAccessControl(model) } &>> collection.bulkInsertIteratee(bulkSize, bulkByteSize)
 
   def insert[T](document: T, writeConcern: GetLastError = GetLastError())(implicit writer: BSONDocumentWriter[T], ec: ExecutionContext, ac: AccessContext): Future[LastError] =
     Wrapper.secureDocumentToAccessControl(document)(users).flatMap { accessControl =>
