@@ -1,19 +1,33 @@
 package accesscontroller
 
-import scala.concurrent.{Await, Future, ExecutionContext}
+import scala.concurrent.{Future, ExecutionContext}
 import reactivemongo.core.commands._
 import reactivemongo.bson._
 import reactivemongo.api.collections.GenericQueryBuilder
 import play.api.libs.iteratee._
-import reactivemongo.api.{QueryOpts, ReadPreference, Cursor, FailoverStrategy}
-import reactivemongo.api.collections.default.BSONCollection
+import reactivemongo.api._
 import scala.collection.generic.CanBuildFrom
-import reactivemongo.api.indexes.{IndexType, Index}
-import scala.concurrent.duration._
+import reactivemongo.api.indexes.IndexType
+import reactivemongo.api.indexes.Index
+import scala.Some
+import reactivemongo.api.collections.default.BSONCollection
+import reactivemongo.core.commands.GetLastError
+import reactivemongo.api.FailoverStrategy
+import reactivemongo.api.QueryOpts
 
-object DB {
-  def apply(name: String, failoverStrategy: FailoverStrategy = Store.db.failoverStrategy): AccessControlCollection = collection(name, failoverStrategy)
-  def collection(name: String, failoverStrategy: FailoverStrategy = Store.db.failoverStrategy): AccessControlCollection = AccessControlCollection(name, failoverStrategy)
+case class DB(uri: String, name: String)(users: Users, userGroups: UserGroups, sessions: Sessions)
+{
+  import scala.concurrent.ExecutionContext.Implicits.global
+
+  private val driver = new MongoDriver
+  private val connection = driver.connection(Seq(uri))
+  private val db = connection(name)
+
+  def apply(name: String, failoverStrategy: FailoverStrategy = db.failoverStrategy): AccessControlCollection = collection(name, failoverStrategy)
+
+  def collection(name: String, failoverStrategy: FailoverStrategy = db.failoverStrategy): AccessControlCollection =
+    AccessControlCollection(db[BSONCollection](name, failoverStrategy))(users, userGroups, sessions)
+
 }
 
 object Rights extends Enumeration {
@@ -65,15 +79,15 @@ object Wrapper {
     )
   }
 
-  private[accesscontroller] def secureDocumentToAccessControl[T](document: T)(implicit ec: ExecutionContext, writer: BSONDocumentWriter[T], ac: AccessContext): Future[AccessControl] =
-    Users.checkUsers(Set(ac.user._id)).flatMap {
+  private[accesscontroller] def secureDocumentToAccessControl[T](document: T)(users: Users)(implicit ec: ExecutionContext, writer: BSONDocumentWriter[T], ac: AccessContext): Future[AccessControl] =
+    users.checkUsers(Set(ac.user._id)).flatMap {
       case true => Future.successful(documentToAccessControl(document))
       case _ => Future.failed(NoMatchingUserException(ac.user._id.stringify))
     }
 
 }
 
-sealed case class AccessControlCursor[T](cursor: Cursor[AccessControl])(implicit reader: BSONDocumentReader[T]) {
+sealed case class AccessControlCursor[T](private val cursor: Cursor[AccessControl])(implicit reader: BSONDocumentReader[T]) {
   def enumerate(maxDocs: Int = Int.MaxValue, stopOnError: Boolean = false)(implicit ec: ExecutionContext): Enumerator[T] =
     cursor.enumerate(maxDocs, stopOnError = stopOnError).through[T](Enumeratee.map[AccessControl] {
       accessControl => reader.read(accessControl.model)
@@ -103,7 +117,7 @@ sealed case class AccessControlCursor[T](cursor: Cursor[AccessControl])(implicit
 
 }
 
-sealed case class AccessControlQueryBuilder(queryBuilder: GenericQueryBuilder[BSONDocument, BSONDocumentReader, BSONDocumentWriter]) {
+sealed case class AccessControlQueryBuilder(private val queryBuilder: GenericQueryBuilder[BSONDocument, BSONDocumentReader, BSONDocumentWriter]) {
   def cursor[T](implicit reader: BSONDocumentReader[T] = queryBuilder.structureReader, ec: ExecutionContext): AccessControlCursor[T] = AccessControlCursor[T](queryBuilder.cursor[AccessControl])
 
   def cursor[T](readPreference: ReadPreference)(implicit reader: BSONDocumentReader[T] = queryBuilder.structureReader, ec: ExecutionContext): AccessControlCursor[T] =
@@ -130,12 +144,14 @@ sealed case class AccessControlQueryBuilder(queryBuilder: GenericQueryBuilder[BS
   def comment(message: String): AccessControlQueryBuilder = copy(queryBuilder.comment(message))
 }
 
-case class AccessControlCollection(name: String, failoverStrategy: FailoverStrategy = Store.db.failoverStrategy) {
-  private val collection = Store.db.collection[BSONCollection](name)
+case class AccessControlCollection(private val collection: BSONCollection)(users: Users, userGroups: UserGroups, sessions: Sessions) {
 
   {
     import scala.concurrent.ExecutionContext.Implicits.global
-    Await.result(collection.indexesManager.ensure(Index(List("model._id" -> IndexType.Ascending), unique = true)), 1 second)
+
+    collection.indexesManager.ensure(
+      Index(List("model._id" -> IndexType.Ascending), unique = true)
+    )
   }
 
   private def setRights[S, U](selector: S, id: BSONObjectID, rights: Rights.Value)(implicit swriter: BSONDocumentWriter[S], ec: ExecutionContext, ac: AccessContext) =
@@ -153,13 +169,13 @@ case class AccessControlCollection(name: String, failoverStrategy: FailoverStrat
     }
 
   def setUserRights[S, U](selector: S, userId: BSONObjectID, rights: Rights.Value)(implicit swriter: BSONDocumentWriter[S], ac: AccessContext, ec: ExecutionContext): Future[Unit] =
-    Users.checkUsers(Set(userId)).flatMap {
+    users.checkUsers(Set(userId)).flatMap {
       case true => setRights(selector, userId, rights)
       case _ => Future.failed(NoMatchingUserException(userId.stringify))
     }
 
   def setUserGroupRights[S](selector: S, userGroupId: BSONObjectID, rights: Rights.Value)(implicit swriter: BSONDocumentWriter[S], ac: AccessContext, ec: ExecutionContext): Future[Unit] =
-    UserGroups.checkGroups(Set(userGroupId)).flatMap {
+    userGroups.checkGroups(Set(userGroupId)).flatMap {
       case true => setRights(selector, userGroupId, rights)
       case _ => Future.failed(NoMatchingUserGroupException(userGroupId.stringify))
     }
@@ -175,7 +191,7 @@ case class AccessControlCollection(name: String, failoverStrategy: FailoverStrat
   def stats()(implicit ec: ExecutionContext): Future[CollStatsResult] = collection.stats()
 
   def bulkInsert[T](enumerator: Enumerator[T], bulkSize: Int, bulkByteSize: Int)(implicit writer: BSONDocumentWriter[T], ec: ExecutionContext, ac: AccessContext): Future[Int] =
-    Users.checkUsers(Set(ac.user._id)).flatMap {
+    users.checkUsers(Set(ac.user._id)).flatMap {
       case true => collection.bulkInsert(enumerator.through[AccessControl](Enumeratee.map[T] { el => Wrapper.documentToAccessControl(el) }), bulkSize, bulkByteSize)
       case _ => Future.failed(NoMatchingUserException(ac.user._id.stringify))
     }
@@ -186,12 +202,12 @@ case class AccessControlCollection(name: String, failoverStrategy: FailoverStrat
 //    }
 
   def insert[T](document: T, writeConcern: GetLastError = GetLastError())(implicit writer: BSONDocumentWriter[T], ec: ExecutionContext, ac: AccessContext): Future[LastError] =
-    Wrapper.secureDocumentToAccessControl(document).flatMap { accessControl =>
+    Wrapper.secureDocumentToAccessControl(document)(users).flatMap { accessControl =>
       collection.insert(accessControl, writeConcern)
     }
 
   def insert(document: BSONDocument, writeConcern: GetLastError)(implicit ec: ExecutionContext, ac: AccessContext): Future[LastError] =
-    Wrapper.secureDocumentToAccessControl(document).flatMap { accessControl =>
+    Wrapper.secureDocumentToAccessControl(document)(users).flatMap { accessControl =>
       collection.insert(accessControl, writeConcern)
     }
 
@@ -204,22 +220,22 @@ case class AccessControlCollection(name: String, failoverStrategy: FailoverStrat
     }
 
   def save[T](doc: T, writeConcern: GetLastError)(implicit ec: ExecutionContext, writer: BSONDocumentWriter[T], ac: AccessContext): Future[LastError] =
-    Wrapper.secureDocumentToAccessControl(doc).flatMap { accessControl =>
+    Wrapper.secureDocumentToAccessControl(doc)(users).flatMap { accessControl =>
       collection.save(accessControl, writeConcern)
     }
 
   def save(doc: BSONDocument, writeConcern: GetLastError)(implicit ec: ExecutionContext, ac: AccessContext): Future[LastError] =
-    Wrapper.secureDocumentToAccessControl(doc).flatMap { accessControl =>
+    Wrapper.secureDocumentToAccessControl(doc)(users).flatMap { accessControl =>
       collection.save(accessControl, writeConcern)
     }
 
   def save(doc: BSONDocument)(implicit ec: ExecutionContext, ac: AccessContext): Future[LastError] =
-    Wrapper.secureDocumentToAccessControl(doc).flatMap { accessControl =>
+    Wrapper.secureDocumentToAccessControl(doc)(users).flatMap { accessControl =>
       collection.save(accessControl)
     }
 
   def uncheckedInsert[T](document: T)(implicit writer: BSONDocumentWriter[T], ec: ExecutionContext, ac: AccessContext): Unit =
-    Wrapper.secureDocumentToAccessControl(document).foreach { accessControl =>
+    Wrapper.secureDocumentToAccessControl(document)(users).foreach { accessControl =>
       collection.uncheckedInsert(accessControl)
     }
 

@@ -30,7 +30,7 @@ object UserGroup {
 case class Session(token: String = Session.token(), userId: BSONObjectID, createDate: DateTime = DateTime.now(), expirationDate: DateTime = DateTime.now().plusSeconds(Session.config.getInt("ttl")))
 
 object Session {
-  val config = ConfigFactory.load.getConfig("server.session")
+  val config = ConfigFactory.load.getConfig("access-controller.sessions")
 
   implicit object BSONDateTimeHandler extends BSONHandler[BSONDateTime, DateTime] {
     def read(d: BSONDateTime) = new DateTime(d.value)
@@ -49,7 +49,7 @@ case class Credentials(username: String, password: String, hashed: Boolean = fal
 }
 
 object Credentials {
-  val config = ConfigFactory.load.getConfig("server.security")
+  val config = ConfigFactory.load.getConfig("access-controller.security")
 
   val md = java.security.MessageDigest.getInstance(config.getString("hashType"))
   def hash(password: String): String = md.digest((password + config.getString("add")).getBytes).map(_ & 0xFF).map(_.toHexString).mkString

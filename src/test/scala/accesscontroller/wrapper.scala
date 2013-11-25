@@ -7,19 +7,24 @@ import reactivemongo.bson.{BSONObjectID, Macros, BSONDocument}
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import play.api.libs.iteratee.Iteratee
+import com.typesafe.config.ConfigFactory
 
 class WrapperTest extends TestKit(ActorSystem("Sessions")) with WordSpecLike with MustMatchers with TestUtils {
 
   implicit val ec = system.dispatcher
 
+  val config = ConfigFactory.load.getConfig("access-controller.store")
+  val db = access.db(config.getString("uri"), config.getString("db"))
+  val collection = db("test")
+
   cleanCollections
+
 
   val user = createRandomUsers(1)(ec)(0)
   val user1 = createRandomUsers(1)(ec)(0)
 
   implicit val ac = AccessContext(user, None)
 
-  val collection = DB("test")
 
   case class TestModel(_id: BSONObjectID = BSONObjectID.generate, test: Boolean = true)
   object TestModel {
