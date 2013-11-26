@@ -1,0 +1,270 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<html>
+        <head>
+          <title>models - accesscontroller.models</title>
+          <meta name="description" content="models - accesscontroller.models" />
+          <meta name="keywords" content="models accesscontroller.models" />
+          <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+          
+      <link href="../../lib/template.css" media="screen" type="text/css" rel="stylesheet" />
+      <link href="../../lib/diagrams.css" media="screen" type="text/css" rel="stylesheet" id="diagrams-css" />
+      <script type="text/javascript" src="../../lib/jquery.js" id="jquery-js"></script>
+      <script type="text/javascript" src="../../lib/jquery-ui.js"></script>
+      <script type="text/javascript" src="../../lib/template.js"></script>
+      <script type="text/javascript" src="../../lib/tools.tooltip.js"></script>
+      
+      <script type="text/javascript">
+         if(top === self) {
+            var url = '../../index.html';
+            var hash = 'accesscontroller.models.package';
+            var anchor = window.location.hash;
+            var anchor_opt = '';
+            if (anchor.length >= 1)
+              anchor_opt = '@' + anchor.substring(1);
+            window.location.href = url + '#' + hash + anchor_opt;
+         }
+   	  </script>
+    
+        </head>
+        <body class="value">
+      <div id="definition">
+        <img src="../../lib/package_big.png" />
+        <p id="owner"><a href="../package.html" class="extype" name="accesscontroller">accesscontroller</a></p>
+        <h1>models</h1>
+      </div>
+
+      <h4 id="signature" class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">package</span>
+      </span>
+      <span class="symbol">
+        <span class="name">models</span>
+      </span>
+      </h4>
+      
+          <div id="comment" class="fullcommenttop"></div>
+        
+
+      <div id="mbrsel">
+        <div id="textfilter"><span class="pre"></span><span class="input"><input id="mbrsel-input" type="text" accesskey="/" /></span><span class="post"></span></div>
+        
+        
+        <div id="visbl">
+            <span class="filtertype">Visibility</span>
+            <ol><li class="public in"><span>Public</span></li><li class="all out"><span>All</span></li></ol>
+          </div>
+      </div>
+
+      <div id="template">
+        <div id="allMembers">
+        
+
+        <div id="types" class="types members">
+              <h3>Type Members</h3>
+              <ol><li name="accesscontroller.models.AccessContext" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="AccessContextextendsProductwithSerializable"></a>
+      <a id="AccessContext:AccessContext"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">case class</span>
+      </span>
+      <span class="symbol">
+        <a href="AccessContext.html"><span class="name">AccessContext</span></a><span class="params">(<span name="user">user: <a href="User.html" class="extype" name="accesscontroller.models.User">User</a></span>, <span name="session">session: <span class="extype" name="scala.Option">Option</span>[<a href="Session.html" class="extype" name="accesscontroller.models.Session">Session</a>]</span>, <span name="checked">checked: <span class="extype" name="scala.Boolean">Boolean</span> = <span class="symbol">false</span></span>)</span><span class="result"> extends <span class="extype" name="scala.Product">Product</span> with <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      
+    </li><li name="accesscontroller.models.AccessControl" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="AccessControlextendsProductwithSerializable"></a>
+      <a id="AccessControl:AccessControl"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">case class</span>
+      </span>
+      <span class="symbol">
+        <a href="AccessControl.html"><span class="name">AccessControl</span></a><span class="params">(<span name="model">model: <span class="extype" name="reactivemongo.bson.BSONDocument">BSONDocument</span></span>, <span name="accessLists">accessLists: <a href="AccessControlLists.html" class="extype" name="accesscontroller.models.AccessControlLists">AccessControlLists</a> = <span class="defval" name="AccessControlLists.apply(AccessControlLists.apply$default$1, AccessControlLists.apply$default$2)">...</span></span>)</span><span class="result"> extends <span class="extype" name="scala.Product">Product</span> with <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      
+    </li><li name="accesscontroller.models.AccessControlLists" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="AccessControlListsextendsProductwithSerializable"></a>
+      <a id="AccessControlLists:AccessControlLists"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">case class</span>
+      </span>
+      <span class="symbol">
+        <a href="AccessControlLists.html"><span class="name">AccessControlLists</span></a><span class="params">(<span name="readers">readers: <span class="extype" name="scala.Predef.Set">Set</span>[<span class="extype" name="reactivemongo.bson.BSONObjectID">BSONObjectID</span>] = <span class="defval" name="scala.this.Predef.Set.apply[reactivemongo.bson.BSONObjectID]()">...</span></span>, <span name="writers">writers: <span class="extype" name="scala.Predef.Set">Set</span>[<span class="extype" name="reactivemongo.bson.BSONObjectID">BSONObjectID</span>] = <span class="defval" name="scala.this.Predef.Set.apply[reactivemongo.bson.BSONObjectID]()">...</span></span>)</span><span class="result"> extends <span class="extype" name="scala.Product">Product</span> with <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      
+    </li><li name="accesscontroller.models.Credentials" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="CredentialsextendsProductwithSerializable"></a>
+      <a id="Credentials:Credentials"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">case class</span>
+      </span>
+      <span class="symbol">
+        <a href="Credentials.html"><span class="name">Credentials</span></a><span class="params">(<span name="username">username: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="password">password: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="hashed">hashed: <span class="extype" name="scala.Boolean">Boolean</span> = <span class="symbol">false</span></span>)</span><span class="result"> extends <span class="extype" name="scala.Product">Product</span> with <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      
+    </li><li name="accesscontroller.models.Session" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="SessionextendsProductwithSerializable"></a>
+      <a id="Session:Session"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">case class</span>
+      </span>
+      <span class="symbol">
+        <a href="Session.html"><span class="name">Session</span></a><span class="params">(<span name="token">token: <span class="extype" name="scala.Predef.String">String</span> = <span class="defval" name="Session.token(Session.token$default$1)">...</span></span>, <span name="userId">userId: <span class="extype" name="reactivemongo.bson.BSONObjectID">BSONObjectID</span></span>, <span name="createDate">createDate: <span class="extype" name="org.joda.time.DateTime">DateTime</span> = <span class="symbol">org.joda.time.DateTime.now()</span></span>, <span name="expirationDate">expirationDate: <span class="extype" name="org.joda.time.DateTime">DateTime</span> = <span class="defval" name="org.joda.time.DateTime.now().plusSeconds(Session.config.getInt(&quot;ttl&quot;))">...</span></span>)</span><span class="result"> extends <span class="extype" name="scala.Product">Product</span> with <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      
+    </li><li name="accesscontroller.models.User" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="UserextendsProductwithSerializable"></a>
+      <a id="User:User"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">case class</span>
+      </span>
+      <span class="symbol">
+        <a href="User.html"><span class="name">User</span></a><span class="params">(<span name="_id">_id: <span class="extype" name="reactivemongo.bson.BSONObjectID">BSONObjectID</span> = <span class="defval" name="reactivemongo.bson.BSONObjectID.generate">...</span></span>, <span name="credentials">credentials: <a href="Credentials.html" class="extype" name="accesscontroller.models.Credentials">Credentials</a></span>, <span name="groups">groups: <span class="extype" name="scala.Predef.Set">Set</span>[<span class="extype" name="reactivemongo.bson.BSONObjectID">BSONObjectID</span>] = <span class="defval" name="scala.this.Predef.Set.apply[reactivemongo.bson.BSONObjectID]()">...</span></span>)</span><span class="result"> extends <span class="extype" name="scala.Product">Product</span> with <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      
+    </li><li name="accesscontroller.models.UserGroup" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="UserGroupextendsProductwithSerializable"></a>
+      <a id="UserGroup:UserGroup"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">case class</span>
+      </span>
+      <span class="symbol">
+        <a href="UserGroup.html"><span class="name">UserGroup</span></a><span class="params">(<span name="_id">_id: <span class="extype" name="reactivemongo.bson.BSONObjectID">BSONObjectID</span> = <span class="defval" name="reactivemongo.bson.BSONObjectID.generate">...</span></span>, <span name="ownerId">ownerId: <span class="extype" name="reactivemongo.bson.BSONObjectID">BSONObjectID</span></span>, <span name="name">name: <span class="extype" name="scala.Predef.String">String</span></span>, <span name="users">users: <span class="extype" name="scala.Predef.Set">Set</span>[<span class="extype" name="reactivemongo.bson.BSONObjectID">BSONObjectID</span>] = <span class="defval" name="scala.this.Predef.Set.apply[reactivemongo.bson.BSONObjectID]()">...</span></span>)</span><span class="result"> extends <span class="extype" name="scala.Product">Product</span> with <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      
+    </li></ol>
+            </div>
+
+        
+
+        <div id="values" class="values members">
+              <h3>Value Members</h3>
+              <ol><li name="accesscontroller.models.AccessControl" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="AccessControl"></a>
+      <a id="AccessControl:AccessControl"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">object</span>
+      </span>
+      <span class="symbol">
+        <a href="AccessControl$.html"><span class="name">AccessControl</span></a><span class="result"> extends <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      
+    </li><li name="accesscontroller.models.AccessControlLists" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="AccessControlLists"></a>
+      <a id="AccessControlLists:AccessControlLists"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">object</span>
+      </span>
+      <span class="symbol">
+        <a href="AccessControlLists$.html"><span class="name">AccessControlLists</span></a><span class="result"> extends <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      
+    </li><li name="accesscontroller.models.Credentials" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="Credentials"></a>
+      <a id="Credentials:Credentials"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">object</span>
+      </span>
+      <span class="symbol">
+        <a href="Credentials$.html"><span class="name">Credentials</span></a><span class="result"> extends <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      
+    </li><li name="accesscontroller.models.Session" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="Session"></a>
+      <a id="Session:Session"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">object</span>
+      </span>
+      <span class="symbol">
+        <a href="Session$.html"><span class="name">Session</span></a><span class="result"> extends <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      
+    </li><li name="accesscontroller.models.User" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="User"></a>
+      <a id="User:User"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">object</span>
+      </span>
+      <span class="symbol">
+        <a href="User$.html"><span class="name">User</span></a><span class="result"> extends <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      
+    </li><li name="accesscontroller.models.UserGroup" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="UserGroup"></a>
+      <a id="UserGroup:UserGroup"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">object</span>
+      </span>
+      <span class="symbol">
+        <a href="UserGroup$.html"><span class="name">UserGroup</span></a><span class="result"> extends <span class="extype" name="scala.Serializable">Serializable</span></span>
+      </span>
+      </h4>
+      
+    </li></ol>
+            </div>
+
+        
+
+        
+        </div>
+
+        <div id="inheritedMembers">
+        
+        
+        </div>
+
+        <div id="groupedMembers">
+        <div class="group" name="Ungrouped">
+              <h3>Ungrouped</h3>
+              
+            </div>
+        </div>
+
+      </div>
+
+      <div id="tooltip"></div>
+
+      <div id="footer">  </div>
+
+
+    </body>
+      </html>
