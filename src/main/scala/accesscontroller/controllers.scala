@@ -30,11 +30,11 @@ class AccessController(implicit ec: ExecutionContext) {
 
   /**
    *
-   * It should be your only way to get an [[accesscontroller.AccessControlDB]] instance.
+   * It should be your only way to get an [[accesscontroller.wrapper.AccessControlDB]] instance.
    *
    * @param uri The database server address
    * @param name The database name
-   * @return An instance of [[accesscontroller.AccessControlDB]]
+   * @return An instance of [[accesscontroller.wrapper.AccessControlDB]]
    */
   def db(uri: String, name: String) = AccessControlDB(uri, name)(users, userGroups, sessions)
 }
@@ -86,9 +86,9 @@ class Users(private val store: Store)(s: =>Sessions, ug: =>UserGroups)(implicit 
    *
    * Gets a user from its [[reactivemongo.bson.BSONObjectID]].
    *
-   * If the user doesn't exists, a [[accesscontroller.NoMatchingUserException]] is thrown.
+   * If the user doesn't exists, a [[accesscontroller.errors.NoMatchingUserException]] is thrown.
    *
-   * @param userId [[accesscontroller.User._id]]
+   * @param userId [[accesscontroller.models.User._id]]
    * @param ec Current [[scala.concurrent.ExecutionContext]]
    * @return {Future[User]}
    */
@@ -105,9 +105,9 @@ class Users(private val store: Store)(s: =>Sessions, ug: =>UserGroups)(implicit 
    * If some users don't exists, this method doesn't throw. If you want to verify some users existence, use the
    * [[accesscontroller.Users.checkUsers]] method instead.
    *
-   * @param users [[accesscontroller.User._id]]s you want to get
+   * @param users [[accesscontroller.models.User._id]]you want to get
    * @param ec Current [[scala.concurrent.ExecutionContext]]
-   * @return {Cursor[User]} which can be used to enumerate each found users
+   * @return A [[reactivemongo.api.Cursor]] which can be used to enumerate each found users
    */
   def getUsers(users: Set[BSONObjectID])(implicit ec: ExecutionContext): Cursor[User] =
     collection.find(BSONDocument("_id" -> BSONDocument("$in" -> users))).cursor[User]
@@ -116,9 +116,9 @@ class Users(private val store: Store)(s: =>Sessions, ug: =>UserGroups)(implicit 
    *
    * Checks that all the user ids exists
    *
-   * @param users [[accesscontroller.User._id]]s you want to check
+   * @param users [[accesscontroller.models.User._id]]s you want to check
    * @param ec Current [[scala.concurrent.ExecutionContext]]
-   * @return {true} if every ids are existent
+   * @return a Boolean which is true if every ids are existent
    */
   def checkUsers(users: Set[BSONObjectID])(implicit ec: ExecutionContext): Future[Boolean] = {
     store.db.command(Count(collection.name, query = Some(BSONDocument("_id" -> BSONDocument("$in" -> users))))).flatMap {
@@ -129,11 +129,11 @@ class Users(private val store: Store)(s: =>Sessions, ug: =>UserGroups)(implicit 
 
   /**
    *
-   * Creates a new user from its [[accesscontroller.User]] model
+   * Creates a new user from its [[accesscontroller.models.User]] model
    *
-   * @param user [[accesscontroller.User]] model
+   * @param user [[accesscontroller.models.User]] model
    * @param ec Current [[scala.concurrent.ExecutionContext]]
-   * @return {Future[User]} containing the created [[accesscontroller.User]]
+   * @return A [[scala.concurrent.Future]] containing the created [[accesscontroller.models.User]]
    */
   def createUser(user: User)(implicit ec: ExecutionContext): Future[User] =
     collection.insert(User.Handler.write(user)).flatMap { _ =>
@@ -142,9 +142,9 @@ class Users(private val store: Store)(s: =>Sessions, ug: =>UserGroups)(implicit 
 
   /**
    *
-   * Connects an existent user from its [[accesscontroller.Credentials]]
+   * Connects an existent user from its [[accesscontroller.models.Credentials]]
    *
-   * If the [[accesscontroller.Credentials]] are unknown, it throws a {NoMatchingUserException}
+   * If the [[accesscontroller.models.Credentials]] are unknown, it throws a {NoMatchingUserException}
    *
    * This method can change the {AccessContext}, so you should implicitly map it
    *
@@ -157,9 +157,9 @@ class Users(private val store: Store)(s: =>Sessions, ug: =>UserGroups)(implicit 
    * }
    * }}}
    *
-   * @param credentials [[accesscontroller.Credentials]] of the user
+   * @param credentials [[accesscontroller.models.Credentials]] of the user
    * @param ec Current [[scala.concurrent.ExecutionContext]]
-   * @return A {Future[AccessContext]} containing the new [[accesscontroller.AccessContext]]
+   * @return A {Future[AccessContext]} containing the new [[accesscontroller.models.AccessContext]]
    */
   def connectUser(credentials: Credentials)(implicit ec: ExecutionContext): Future[AccessContext] =
     collection.find(BSONDocument("credentials" -> Credentials.Handler.write(credentials))).cursor[User].headOption.flatMap {
@@ -171,12 +171,12 @@ class Users(private val store: Store)(s: =>Sessions, ug: =>UserGroups)(implicit 
 
   /**
    *
-   * Connects an existent user from its [[accesscontroller.Session]] token
+   * Connects an existent user from its [[accesscontroller.models.Session]] token
    *
-   * If the token is unknown or expired, a [[accesscontroller.NotValidSessionException]] is thrown
-   * If the found session correspond to an unknown user, a [[accesscontroller.NoMatchingUserException]] is thrown
+   * If the token is unknown or expired, a [[accesscontroller.errors.NotValidSessionException]] is thrown
+   * If the found session correspond to an unknown user, a [[accesscontroller.errors.NoMatchingUserException]] is thrown
    *
-   * This method can change the [[accesscontroller.AccessContext]], so you should implicitly map it
+   * This method can change the [[accesscontroller.models.AccessContext]], so you should implicitly map it
    *
    * Example:
    * {{{
@@ -189,7 +189,7 @@ class Users(private val store: Store)(s: =>Sessions, ug: =>UserGroups)(implicit 
    *
    * @param token Session token of the user you want to connect
    * @param ec Current [[scala.concurrent.ExecutionContext]]
-   * @return A {Future[AccessContext]} with the new [[accesscontroller.AccessContext]]
+   * @return A [[scala.concurrent.Future]] containing the new [[accesscontroller.models.AccessContext]]
    */
   def connectUser(token: String)(implicit ec: ExecutionContext): Future[AccessContext] =
     sessions.getSession(token).flatMap { session =>
@@ -205,10 +205,10 @@ class Users(private val store: Store)(s: =>Sessions, ug: =>UserGroups)(implicit 
    *
    * Disconnects a user from its session.
    *
-   * If the current [[accesscontroller.AccessContext]] is inconsistent, a [[accesscontroller.NotValidAccessContextException]]
-   * or a [[accesscontroller.ExpiredSessionException]] can be thrown.
+   * If the current [[accesscontroller.models.AccessContext]] is inconsistent, a [[accesscontroller.errors.NotValidAccessContextException]]
+   * or a [[accesscontroller.errors.ExpiredSessionException]] can be thrown.
    *
-   * This method can change the [[accesscontroller.AccessContext]], so you should implicitly map it
+   * This method can change the [[accesscontroller.models.AccessContext]], so you should implicitly map it
    *
    * Example:
    * {{{
@@ -219,9 +219,9 @@ class Users(private val store: Store)(s: =>Sessions, ug: =>UserGroups)(implicit 
    * }
    * }}}
    *
-   * @param ac Current [[accesscontroller.AccessContext]]
+   * @param ac Current [[accesscontroller.models.AccessContext]]
    * @param ec Current [[scala.concurrent.ExecutionContext]]
-   * @return {Future[AccessContext]} with the new [[accesscontroller.AccessContext]]
+   * @return [[scala.concurrent.Future]] containing the new [[accesscontroller.models.AccessContext]]
    */
   def disconnectUser(implicit ac: AccessContext, ec: ExecutionContext): Future[AccessContext] =
     ac.check { implicit ac =>
@@ -232,18 +232,18 @@ class Users(private val store: Store)(s: =>Sessions, ug: =>UserGroups)(implicit 
 
   /**
    *
-   * Deletes the [[accesscontroller.AccessContext.user]].
+   * Deletes the [[accesscontroller.models.AccessContext.user]].
    *
-   * If the user is unknown, a [[accesscontroller.NoMatchingUserException]] is thrown,
-   * If the [[accesscontroller.AccessContext]] is inconsistent, a [[accesscontroller.NotValidAccessContextException]] or
-   * a [[accesscontroller.ExpiredSessionException]] is thrown.
+   * If the user is unknown, a [[accesscontroller.errors.NoMatchingUserException]] is thrown,
+   * If the [[accesscontroller.models.AccessContext]] is inconsistent, a [[accesscontroller.errors.NotValidAccessContextException]] or
+   * a [[accesscontroller.errors.ExpiredSessionException]] is thrown.
    *
-   * After deleting the [[accesscontroller.AccessContext.user]], your current [[accesscontroller.AccessContext]] won't
+   * After deleting the [[accesscontroller.models.AccessContext.user]], your current [[accesscontroller.models.AccessContext]] won't
    * be consistent anymore. It's up to you to create a new consistent one.
    *
-   * @param ac Current [[accesscontroller.AccessContext]]
+   * @param ac Current [[accesscontroller.models.AccessContext]]
    * @param ec Current [[scala.concurrent.ExecutionContext]]
-   * @return {Future[Unit]}
+   * @return A [[scala.concurrent.Future]] of [[scala.Unit]]
    */
   def deleteUser(implicit ac: AccessContext, ec: ExecutionContext): Future[Unit] =
     ac.check { implicit ac =>
@@ -288,8 +288,8 @@ class Users(private val store: Store)(s: =>Sessions, ug: =>UserGroups)(implicit 
  *
  * The sessions controller permits to handle your users' sessions.
  *
- * @param store [[accesscontroller.Store]]
- * @param u [[accesscontroller.Users]] ref
+ * @param store A [[accesscontroller.Store]]
+ * @param u A [[accesscontroller.Users]] ref
  * @param ec Current [[scala.concurrent.ExecutionContext]]
  */
 class Sessions(private val store: Store)(u: =>Users)(implicit ec: ExecutionContext) {
@@ -305,13 +305,13 @@ class Sessions(private val store: Store)(u: =>Users)(implicit ec: ExecutionConte
 
   /**
    *
-   * Create a new [[accesscontroller.Session]]
+   * Create a new [[accesscontroller.models.Session]]
    *
-   * If the attached user doesn't exists, a [[accesscontroller.NoMatchingUserException]] is thrown.
+   * If the attached user doesn't exists, a [[accesscontroller.errors.NoMatchingUserException]] is thrown.
    *
-   * @param session [[accesscontroller.Session]] model
+   * @param session An [[accesscontroller.models.Session]] model
    * @param ec Current [[scala.concurrent.ExecutionContext]]
-   * @return {Future[Session]} containing the created [[accesscontroller.Session]]
+   * @return A [[scala.concurrent.Future]] containing the created [[accesscontroller.models.Session]]
    */
   def createSession(session: Session)(implicit ec: ExecutionContext): Future[Session] =
     users.getUser(session.userId).flatMap { _ =>
@@ -322,14 +322,14 @@ class Sessions(private val store: Store)(u: =>Users)(implicit ec: ExecutionConte
 
   /**
    *
-   * Gets a [[accesscontroller.Session]] from its token.
+   * Gets a [[accesscontroller.models.Session]] from its token.
    *
-   * If the token is not found, a [[accesscontroller.NoMatchingSessionException]] is thrown.
-   * If the session is expired, a [[accesscontroller.ExpiredSessionException]] is thrown.
+   * If the token is not found, a [[accesscontroller.errors.NoMatchingSessionException]] is thrown.
+   * If the session is expired, a [[accesscontroller.errors.ExpiredSessionException]] is thrown.
    *
-   * @param token [[accesscontroller.Session.token]]
+   * @param token An [[accesscontroller.models.Session.token]]
    * @param ec Current [[scala.concurrent.ExecutionContext]]
-   * @return {Future[Session]} containing the found [[accesscontroller.Session]]
+   * @return A [[scala.concurrent.Future]] containing the found [[accesscontroller.models.Session]]
    */
   def getSession(token: String)(implicit ec: ExecutionContext): Future[Session] =
     collection.find(BSONDocument("token" -> token)).cursor[Session].headOption.flatMap {
@@ -342,25 +342,25 @@ class Sessions(private val store: Store)(u: =>Users)(implicit ec: ExecutionConte
 
   /**
    *
-   * Deletes a [[accesscontroller.Session]] from the current [[accesscontroller.AccessController]]
+   * Deletes a [[accesscontroller.models.Session]] from the current [[accesscontroller.AccessController]]
    *
-   * If the [[accesscontroller.AccessContext]] is inconsistent, a [[accesscontroller.NotValidAccessContextException]] or
-   * a [[accesscontroller.ExpiredSessionException]] is thrown.
+   * If the [[accesscontroller.models.AccessContext]] is inconsistent, a [[accesscontroller.errors.NotValidAccessContextException]] or
+   * a [[accesscontroller.errors.ExpiredSessionException]] is thrown.
    *
-   * This method can change the [[accesscontroller.AccessContext]], so you should implicitly map it
+   * This method can change the [[accesscontroller.models.AccessContext]], so you should implicitly map it
    *
    * Example:
    * {{{
    * implicit val ac = ??? // your initial access context
    *
    * accessController.sessions.deleteSession.map { implicit ac =>
-   *  // your code using the new implicit {AccessContext} here ...
+   *  // your code using the new implicit AccessContext here ...
    * }
    * }}}
    *
    * @param ac Current [[accesscontroller.AccessController]]
    * @param ec Current [[scala.concurrent.ExecutionContext]]
-   * @return {Future[AccessContext]} containing the new [[accesscontroller.AccessContext]]
+   * @return A [[scala.concurrent.Future]] containing the new [[accesscontroller.models.AccessContext]]
    */
   def deleteSession(implicit ac: AccessContext, ec: ExecutionContext): Future[AccessContext] =
     ac.session match {
@@ -373,13 +373,13 @@ class Sessions(private val store: Store)(u: =>Users)(implicit ec: ExecutionConte
 
   /**
    *
-   * Deletes a [[accesscontroller.Session]] from its token.
+   * Deletes a [[accesscontroller.models.Session]] from its token.
    *
-   * If the [[accesscontroller.Session.token]] is unknown, a [[accesscontroller.NoMatchingSessionException]] is thrown.
+   * If the [[accesscontroller.models.Session.token]] is unknown, a [[accesscontroller.errors.NoMatchingSessionException]] is thrown.
    *
-   * @param token [[accesscontroller.Session.token]]
+   * @param token A [[accesscontroller.models.Session.token]]
    * @param ec Current [[scala.concurrent.ExecutionContext]]
-   * @return {Future[Unit]}
+   * @return A [[scala.concurrent.Future]] of [[scala.Unit]]
    */
   def deleteSession(token: String)(implicit ec: ExecutionContext): Future[Unit] =
     collection.remove(BSONDocument("token" -> token)).flatMap {
@@ -391,10 +391,10 @@ class Sessions(private val store: Store)(u: =>Users)(implicit ec: ExecutionConte
 
   /**
    *
-   * Deletes every expired [[accesscontroller.Session]]s
+   * Deletes every expired [[accesscontroller.models.Session]]s
    *
    * @param ec Current [[scala.concurrent.ExecutionContext]]
-   * @return {Future[Int]} containing the number of deleted [[accesscontroller.Session]]s
+   * @return A [[scala.concurrent.Future]] containing the number of deleted [[accesscontroller.models.Session]]s
    */
   def clearSessions(implicit ec: ExecutionContext): Future[Int] =
     collection.remove(BSONDocument("expirationDate" -> BSONDocument("$lt" -> BSONDateTime(DateTime.now.getMillis)))).flatMap { res =>
@@ -407,8 +407,8 @@ class Sessions(private val store: Store)(u: =>Users)(implicit ec: ExecutionConte
  *
  * The user groups controller permits to handle user groups
  *
- * @param store [[accesscontroller.Store]]
- * @param u [[accesscontroller.Users]] ref
+ * @param store A [[accesscontroller.Store]]
+ * @param u An [[accesscontroller.Users]] ref
  * @param ec Current [[scala.concurrent.ExecutionContext]]
  */
 class UserGroups(private val store: Store)(u: =>Users)(implicit ec: ExecutionContext) {
@@ -419,13 +419,13 @@ class UserGroups(private val store: Store)(u: =>Users)(implicit ec: ExecutionCon
 
   /**
    *
-   * Gets a [[accesscontroller.UserGroup]].
+   * Gets a [[accesscontroller.models.UserGroup]].
    *
-   * If the [[accesscontroller.UserGroup._id]] doesn't exist, a [[accesscontroller.NoMatchingUserGroupException]] is thrown.
+   * If the [[accesscontroller.models.UserGroup._id doesn't exist, a [[accesscontroller.errors.NoMatchingUserGroupException]] is thrown.
    *
-   * @param groupId Searched [[accesscontroller.UserGroup._id]]
+   * @param groupId Searched [[accesscontroller.models.UserGroup._id]]
    * @param ec Current [[scala.concurrent.ExecutionContext]]
-   * @return {Future[UserGroup]} containing the found [[accesscontroller.UserGroup]]
+   * @return A [[scala.concurrent.Future]] containing the found [[accesscontroller.models.UserGroup]]
    */
   def getUserGroup(groupId: BSONObjectID)(implicit ec: ExecutionContext): Future[UserGroup] =
     collection.find(BSONDocument("_id" -> groupId)).cursor[UserGroup].headOption.flatMap {
@@ -435,16 +435,16 @@ class UserGroups(private val store: Store)(u: =>Users)(implicit ec: ExecutionCon
 
   /**
    *
-   * Creates a [[accesscontroller.UserGroup]].
+   * Creates a [[accesscontroller.models.UserGroup]].
    *
-   * If the [[accesscontroller.UserGroup.members]] contains an unknown [[accesscontroller.User._id]],
-   * a [[accesscontroller.NoMatchingUserException]] is thrown.
+   * If the [[accesscontroller.models.UserGroup.members]] contains an unknown [[accesscontroller.models.User._id]],
+   * a [[accesscontroller.errors.NoMatchingUserException]] is thrown.
    *
-   * If the [[accesscontroller.UserGroup.ownerId]] is unknown, a [[accesscontroller.NoMatchingUserException]] is thrown.
+   * If the [[accesscontroller.models.UserGroup.ownerId]] is unknown, a [[accesscontroller.errors.NoMatchingUserException]] is thrown.
    *
-   * @param userGroup A [[accesscontroller.UserGroup]] model to insert
+   * @param userGroup A [[accesscontroller.models.UserGroup]] model to insert
    * @param ec Current [[scala.concurrent.ExecutionContext]]
-   * @return A {Future[UserGroup]} containing the created [[accesscontroller.UserGroup]]
+   * @return A [[scala.concurrent.Future]] containing the created [[accesscontroller.models.UserGroup]]
    */
   def createUserGroup(userGroup: UserGroup)(implicit ec: ExecutionContext): Future[UserGroup] =
     collection.find(BSONDocument("_id" -> userGroup._id)).cursor[UserGroup].headOption.flatMap {
@@ -456,19 +456,19 @@ class UserGroups(private val store: Store)(u: =>Users)(implicit ec: ExecutionCon
 
   /**
    *
-   * Creates a [[accesscontroller.UserGroup]].
+   * Creates a [[accesscontroller.models.UserGroup]].
    *
-   * The [[accesscontroller.UserGroup.ownerId]] is set to the current [[accesscontroller.AccessContext.user._id]].
+   * The [[accesscontroller.models.UserGroup.ownerId]] is set to the current [[accesscontroller.models.AccessContext.user._id]].
    *
-   * If the [[accesscontroller.UserGroup.members]] contains an unknown [[accesscontroller.User._id]],
-   * a [[accesscontroller.NoMatchingUserException]] is thrown.
+   * If the [[accesscontroller.models.UserGroup.members]] contains an unknown [[accesscontroller.models.User._id]],
+   * a [[accesscontroller.errors.NoMatchingUserException]] is thrown.
    *
-   * If the [[accesscontroller.UserGroup.ownerId]] is unknown, a [[accesscontroller.NoMatchingUserException]] is thrown.
+   * If the [[accesscontroller.models.UserGroup.ownerId]] is unknown, a [[accesscontroller.errors.NoMatchingUserException]] is thrown.
    *
-   * If the [[accesscontroller.AccessContext]] is inconsistent, a [[accesscontroller.NotValidAccessContextException]] or
-   * a [[accesscontroller.ExpiredSessionException]] is thrown.
+   * If the [[accesscontroller.models.AccessContext]] is inconsistent, a [[accesscontroller.errors.NotValidAccessContextException]] or
+   * a [[accesscontroller.errors.ExpiredSessionException]] is thrown.
    *
-   * This method can change the [[accesscontroller.AccessContext]], so you should implicitly map it
+   * This method can change the [[accesscontroller.models.AccessContext]], so you should implicitly map it
    *
    * Example:
    * {{{
@@ -477,17 +477,17 @@ class UserGroups(private val store: Store)(u: =>Users)(implicit ec: ExecutionCon
    * accessController.userGroups.createUserGroup("name", Set(user1, user2, ...)).map {
    *   case (group, ac_) => {
    *     implicit val ac = ac_ // in order to update the implicit access context
-   *     // your code using the new implicit {AccessContext} here ...
+   *     // your code using the new implicit AccessContext here ...
    *   }
    * }
    * }}}
    *
    * @param name Name of the group
    * @param users Group members
-   * @param ac Current [[accesscontroller.AccessContext]]
+   * @param ac Current [[accesscontroller.models.AccessContext]]
    * @param ec Current [[scala.concurrent.ExecutionContext]]
-   * @return A {Future[(UserGroup, AccessContext)]} containing the created [[accesscontroller.UserGroup]] and the new
-   *         [[accesscontroller.AccessContext]]
+   * @return A [[scala.concurrent.Future]] containing the created [[accesscontroller.models.UserGroup]] and the new
+   *         [[accesscontroller.models.AccessContext]]
    */
   def createUserGroup(name: String, users: Set[BSONObjectID] = Set())(implicit ac: AccessContext, ec: ExecutionContext): Future[(UserGroup, AccessContext)] =
     ac.check { implicit ac =>
@@ -498,12 +498,12 @@ class UserGroups(private val store: Store)(u: =>Users)(implicit ec: ExecutionCon
 
   /**
    *
-   * Checks the [[accesscontroller.UserGroup._id]] existence.
+   * Checks the [[accesscontroller.models.UserGroup._id]] existence.
    *
-   * @param groups [[accesscontroller.UserGroup._id]]s
+   * @param groups [[accesscontroller.models.UserGroup._id]]s
    * @param ec Current [[scala.concurrent.ExecutionContext]]
-   * @return {Future[Boolean]} containing {false} if one or more [[accesscontroller.UserGroup._id]] doesn't exists,
-   *         otherwise {true}
+   * @return A [[scala.concurrent.Future]] containing false if one or more [[accesscontroller.models.UserGroup._id]] doesn't exists,
+   *         otherwise true
    */
   def checkGroups(groups: Set[BSONObjectID])(implicit ec: ExecutionContext): Future[Boolean] =
     store.db.command(Count(collection.name, query = Some(BSONDocument("_id" -> BSONDocument("$in" -> groups))))).flatMap {
@@ -513,23 +513,23 @@ class UserGroups(private val store: Store)(u: =>Users)(implicit ec: ExecutionCon
 
   /**
    *
-   * Puts one [[accesscontroller.User]] into a [[accesscontroller.UserGroup]]
+   * Puts one [[accesscontroller.models.User]] into a [[accesscontroller.models.UserGroup]]
    *
-   * If the [[accesscontroller.AccessContext]] is inconsistent, a [[accesscontroller.NotValidAccessContextException]] or
-   * a [[accesscontroller.ExpiredSessionException]] is thrown.
+   * If the [[accesscontroller.models.AccessContext]] is inconsistent, a [[accesscontroller.errors.NotValidAccessContextException]] or
+   * a [[accesscontroller.errors.ExpiredSessionException]] is thrown.
    *
-   * If the [[accesscontroller.UserGroup._id]] is unknown, a [[accesscontroller.NoMatchingUserGroupException]] is thrown.
+   * If the [[accesscontroller.models.UserGroup._id]] is unknown, a [[accesscontroller.errors.NoMatchingUserGroupException]] is thrown.
    *
-   * If the [[accesscontroller.User._id]] is unknown, a [[accesscontroller.NoMatchingUserException]] is thrown.
+   * If the [[accesscontroller.models.User._id]] is unknown, a [[accesscontroller.errors.NoMatchingUserException]] is thrown.
    *
-   * If the [[accesscontroller.AccessContext.user]] isn't the owner of the [[accesscontroller.UserGroup]],
-   * a [[accesscontroller.NoWriteAccessOnUserGroupException]] is thrown.
+   * If the [[accesscontroller.models.AccessContext.user]] isn't the owner of the [[accesscontroller.models.UserGroup]],
+   * a [[accesscontroller.errors.NoWriteAccessOnUserGroupException]] is thrown.
    *
-   * @param groupId A [[accesscontroller.UserGroup._id]]
-   * @param userId A [[accesscontroller.User._id]]
-   * @param ac Current [[accesscontroller.AccessContext]]
+   * @param groupId A [[accesscontroller.models.UserGroup._id]]
+   * @param userId A [[accesscontroller.models.User._id]]
+   * @param ac Current [[accesscontroller.models.AccessContext]]
    * @param ec Current [[scala.concurrent.ExecutionContext]]
-   * @return {Future[UserGroup]} containing the new version of the [[accesscontroller.UserGroup]]
+   * @return A [[scala.concurrent.Future]] containing the new version of the [[accesscontroller.models.UserGroup]]
    */
   def putUserInUserGroup(groupId: BSONObjectID, userId: BSONObjectID)(implicit ac: AccessContext, ec: ExecutionContext): Future[UserGroup] =
     ac.check { implicit ac => putUsersInUserGroup(groupId, Set(userId)) }
@@ -539,15 +539,15 @@ class UserGroups(private val store: Store)(u: =>Users)(implicit ec: ExecutionCon
 
   /**
    *
-   * Puts some [[accesscontroller.User]]s into a [[accesscontroller.UserGroup]]
+   * Puts some [[accesscontroller.models.User]]s into a [[accesscontroller.models.UserGroup]]
    *
    * Please see [[accesscontroller.UserGroups.putUserInUserGroup]] method for more details
    *
-   * @param groupId A [[accesscontroller.UserGroup._id]]
-   * @param userList Some [[accesscontroller.User._id]]s
-   * @param ac Current [[accesscontroller.AccessContext]]
+   * @param groupId A [[accesscontroller.models.UserGroup._id]]
+   * @param userList Some [[accesscontroller.models.User._id]]s
+   * @param ac Current [[accesscontroller.models.AccessContext]]
    * @param ec Current [[scala.concurrent.ExecutionContext]]
-   * @return A {Future[UserGroup]} containing the new version of [[accesscontroller.UserGroup]]
+   * @return A [[scala.concurrent.Future]] containing the new version of [[accesscontroller.models.UserGroup]]
    */
   def putUsersInUserGroup(groupId: BSONObjectID, userList: Set[BSONObjectID])(implicit ac: AccessContext, ec: ExecutionContext): Future[UserGroup] =
     ac.check { implicit ac =>
@@ -570,30 +570,30 @@ class UserGroups(private val store: Store)(u: =>Users)(implicit ec: ExecutionCon
 
   /**
    *
-   * Deletes a [[accesscontroller.User]] from a [[accesscontroller.UserGroup]].
+   * Deletes a [[accesscontroller.models.User]] from a [[accesscontroller.models.UserGroup]].
    *
-   * If the [[accesscontroller.UserGroup._id]] is unknown, a [[accesscontroller.NoMatchingUserGroupException]] is thrown.
+   * If the [[accesscontroller.models.UserGroup._id]] is unknown, a [[accesscontroller.errors.NoMatchingUserGroupException]] is thrown.
    *
-   * If the [[accesscontroller.User._id]] is unknown, a [[accesscontroller.NoMatchingUserException]] is thrown.
+   * If the [[accesscontroller.models.User._id]] is unknown, a [[accesscontroller.errors.NoMatchingUserException]] is thrown.
    *
-   * @param groupId A [[accesscontroller.UserGroup._id]]
-   * @param userId A [[accesscontroller.User._id]]
+   * @param groupId A [[accesscontroller.models.UserGroup._id]]
+   * @param userId A [[accesscontroller.models.User._id]]
    * @param ec Current [[scala.concurrent.ExecutionContext]]
-   * @return A {Future[UserGroup]} containing the new version of [[accesscontroller.UserGroup]]
+   * @return A {Future[UserGroup]} containing the new version of [[accesscontroller.models.UserGroup]]
    */
   def deleteUserFromUserGroup(groupId: BSONObjectID, userId: BSONObjectID)(implicit ec: ExecutionContext): Future[UserGroup] =
     deleteUsersFromUserGroup(groupId, Set(userId))
 
   /**
    *
-   * Deletes some [[accesscontroller.User]]s from a [[accesscontroller.UserGroup]].
+   * Deletes some [[accesscontroller.models.User]]s from a [[accesscontroller.models.UserGroup]].
    *
    * Please see the [[accesscontroller.UserGroups.deleteUsersFromUserGroup]] method for more details.
    *
-   * @param groupId A [[accesscontroller.UserGroup._id]]
-   * @param userList Some [[accesscontroller.User._id]]s
+   * @param groupId A [[accesscontroller.models.UserGroup._id]]
+   * @param userList Some [[accesscontroller.models.User._id]]s
    * @param ec Current [[scala.concurrent.ExecutionContext]]
-   * @return A {Future[UserGroup]} containing the new version of [[accesscontroller.UserGroup]]
+   * @return A [[scala.concurrent.Future]] containing the new version of [[accesscontroller.models.UserGroup]]
    */
   def deleteUsersFromUserGroup(groupId: BSONObjectID, userList: Set[BSONObjectID])(implicit ec: ExecutionContext): Future[UserGroup] =
     users.checkUsers(userList).flatMap {
@@ -613,29 +613,29 @@ class UserGroups(private val store: Store)(u: =>Users)(implicit ec: ExecutionCon
 
   /**
    *
-   * Deletes a [[accesscontroller.UserGroup]].
+   * Deletes a [[accesscontroller.models.UserGroup]].
    *
-   * If the [[accesscontroller.AccessContext.user]] is not the owner of the [[accesscontroller.UserGroup]],
-   * a [[accesscontroller.NoWriteAccessOnUserGroupException]] is thrown.
+   * If the [[accesscontroller.models.AccessContext.user]] is not the owner of the [[accesscontroller.models.UserGroup]],
+   * a [[accesscontroller.errors.NoWriteAccessOnUserGroupException]] is thrown.
    *
-   * If the [[accesscontroller.AccessContext]] is inconsistent, a [[accesscontroller.NotValidAccessContextException]] or
-   * a [[accesscontroller.ExpiredSessionException]] is thrown.
+   * If the [[accesscontroller.models.AccessContext]] is inconsistent, a [[accesscontroller.errors.NotValidAccessContextException]] or
+   * a [[accesscontroller.errors.ExpiredSessionException]] is thrown.
    *
-   * This method can change the [[accesscontroller.AccessContext]], so you should implicitly map it
+   * This method can change the [[accesscontroller.models.AccessContext]], so you should implicitly map it
    *
    * Example:
    * {{{
    * implicit val ac = ??? // your initial access context
    *
    * accessController.userGroups.deleteUserGroup("groupid").map { implicit ac =>
-   *   // your code using the new implicit {AccessContext} here ...
+   *   // your code using the new implicit AccessContext here ...
    * }
    * }}}
    *
-   * @param groupId A [[accesscontroller.UserGroup._id]]
-   * @param ac Current [[accesscontroller.AccessContext]]
+   * @param groupId A [[accesscontroller.models.UserGroup._id]]
+   * @param ac Current [[accesscontroller.models.AccessContext]]
    * @param ec Current [[scala.concurrent.ExecutionContext]]
-   * @return A {Future[AccessContext]} containing the new version of [[accesscontroller.AccessContext]]
+   * @return A [[scala.concurrent.Future]] containing the new version of [[accesscontroller.models.AccessContext]]
    */
   def deleteUserGroup(groupId: BSONObjectID)(implicit ac: AccessContext, ec: ExecutionContext): Future[AccessContext] =
     ac.check { implicit ac =>
@@ -654,23 +654,23 @@ class UserGroups(private val store: Store)(u: =>Users)(implicit ec: ExecutionCon
 
   /**
    *
-   * Sets the [[accesscontroller.UserGroup.ownerId]] to a new one.
+   * Sets the [[accesscontroller.models.UserGroup.ownerId]] to a new one.
    *
-   * If the [[accesscontroller.UserGroup._id]] is unknown, a [[accesscontroller.NoMatchingUserGroupException]] is thrown.
+   * If the [[accesscontroller.models.UserGroup._id]] is unknown, a [[accesscontroller.errors.NoMatchingUserGroupException]] is thrown.
    *
-   * If the [[accesscontroller.User._id]] is unknown, a [[accesscontroller.NoMatchingUserException]] is thrown.
+   * If the [[accesscontroller.models.User._id]] is unknown, a [[accesscontroller.errors.NoMatchingUserException]] is thrown.
    *
-   * If the [[accesscontroller.AccessContext.user]] is not the [[accesscontroller.UserGroup]] owner,
-   * a [[accesscontroller.NoWriteAccessOnUserGroupException]] is thrown.
+   * If the [[accesscontroller.models.AccessContext.user]] is not the [[accesscontroller.models.UserGroup]] owner,
+   * a [[accesscontroller.errors.NoWriteAccessOnUserGroupException]] is thrown.
    *
-   * If the [[accesscontroller.AccessContext]] is inconsistent, a [[accesscontroller.NotValidAccessContextException]] or
-   * a [[accesscontroller.ExpiredSessionException]] is thrown.
+   * If the [[accesscontroller.models.AccessContext]] is inconsistent, a [[accesscontroller.errors.NotValidAccessContextException]] or
+   * a [[accesscontroller.errors.ExpiredSessionException]] is thrown.
    *
-   * @param groupId A [[accesscontroller.UserGroup._id]]
-   * @param userId A [[accesscontroller.User._id]]
-   * @param ac Current [[accesscontroller.AccessContext]]
+   * @param groupId A [[accesscontroller.models.UserGroup._id]]
+   * @param userId A [[accesscontroller.models.User._id]]
+   * @param ac Current [[accesscontroller.models.AccessContext]]
    * @param ec Current [[scala.concurrent.ExecutionContext]]
-   * @return A {Future[UserGroup]} containing the new version
+   * @return A [[scala.concurrent.Future]] containing the new version
    */
   def putUserGroupOwner(groupId: BSONObjectID, userId: BSONObjectID)(implicit ac: AccessContext, ec: ExecutionContext): Future[UserGroup] =
     ac.check { implicit ac =>
