@@ -1,9 +1,11 @@
-package accesscontroller
+package accesscontroller.models
 
 import reactivemongo.bson._
 import org.joda.time.DateTime
 import com.typesafe.config.ConfigFactory
 import scala.concurrent.Future
+
+import accesscontroller.errors._
 
 case class AccessControlLists(readers: Set[BSONObjectID] = Set(), writers: Set[BSONObjectID] = Set())
 

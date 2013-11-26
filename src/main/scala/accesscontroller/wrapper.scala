@@ -1,4 +1,4 @@
-package accesscontroller
+package accesscontroller.wrapper
 
 import scala.concurrent.{Future, ExecutionContext}
 import reactivemongo.core.commands._
@@ -15,6 +15,10 @@ import reactivemongo.api.collections.default.BSONCollection
 import reactivemongo.core.commands.GetLastError
 import reactivemongo.api.FailoverStrategy
 import reactivemongo.api.QueryOpts
+
+import accesscontroller._
+import accesscontroller.models._
+import accesscontroller.errors._
 
 case class AccessControlDB(uri: String, name: String)(users: Users, userGroups: UserGroups, sessions: Sessions)
 {

@@ -8,7 +8,9 @@ import scala.concurrent.duration._
 import reactivemongo.bson.BSONObjectID
 import org.joda.time.DateTime
 import play.api.libs.iteratee.Iteratee
-import scala.tools.nsc.interpreter.session
+
+import models._
+import errors._
 
 class SessionsTest extends TestKit(ActorSystem("Sessions")) with WordSpecLike with MustMatchers with TestUtils {
   implicit val ec = system.dispatcher

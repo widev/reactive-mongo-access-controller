@@ -1,4 +1,4 @@
-package accesscontroller
+package accesscontroller.wrapper
 
 import akka.testkit.TestKit
 import akka.actor.ActorSystem
@@ -8,6 +8,10 @@ import scala.concurrent.Await
 import scala.concurrent.duration._
 import play.api.libs.iteratee.Iteratee
 import com.typesafe.config.ConfigFactory
+
+import accesscontroller._
+import accesscontroller.models._
+import accesscontroller.errors._
 
 class WrapperTest extends TestKit(ActorSystem("Sessions")) with WordSpecLike with MustMatchers with TestUtils {
 

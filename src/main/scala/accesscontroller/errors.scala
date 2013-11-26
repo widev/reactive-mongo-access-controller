@@ -1,7 +1,6 @@
-package accesscontroller
+package accesscontroller.errors
 
 import reactivemongo.bson.{BSONDocumentWriter, BSONDocument}
-
 
 trait AccessControllerException extends Exception {
   val message: String

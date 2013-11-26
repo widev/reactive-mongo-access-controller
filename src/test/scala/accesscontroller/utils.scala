@@ -5,6 +5,8 @@ import scala.concurrent.{Future, ExecutionContext, Await}
 import reactivemongo.bson.{BSONObjectID, BSONDocument}
 import scala.concurrent.duration._
 
+import models._
+
 trait TestUtils {
   import scala.concurrent.ExecutionContext.Implicits.global
 

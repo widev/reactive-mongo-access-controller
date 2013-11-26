@@ -10,6 +10,10 @@ import reactivemongo.core.commands.{Count, LastError}
 import com.typesafe.config.ConfigFactory
 import reactivemongo.api.{Cursor, MongoDriver}
 
+import models._
+import errors._
+import wrapper._
+
 /**
  *
  * The main controller which give access to the users, user groups and sessions controllers.
