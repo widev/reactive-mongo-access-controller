@@ -19,12 +19,10 @@ class WrapperTest extends TestKit(ActorSystem("Sessions")) with WordSpecLike wit
 
   cleanCollections
 
-
   val user = createRandomUsers(1)(ec)(0)
   val user1 = createRandomUsers(1)(ec)(0)
 
   implicit val ac = AccessContext(user, Some(randomSession))
-
 
   case class TestModel(_id: BSONObjectID = BSONObjectID.generate, test: Boolean = true)
   object TestModel {

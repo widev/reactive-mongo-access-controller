@@ -16,7 +16,7 @@ import reactivemongo.core.commands.GetLastError
 import reactivemongo.api.FailoverStrategy
 import reactivemongo.api.QueryOpts
 
-case class DB(uri: String, name: String)(users: Users, userGroups: UserGroups, sessions: Sessions)
+case class AccessControlDB(uri: String, name: String)(users: Users, userGroups: UserGroups, sessions: Sessions)
 {
   import scala.concurrent.ExecutionContext.Implicits.global
 
@@ -28,7 +28,6 @@ case class DB(uri: String, name: String)(users: Users, userGroups: UserGroups, s
 
   def collection(name: String, failoverStrategy: FailoverStrategy = db.failoverStrategy): AccessControlCollection =
     AccessControlCollection(db[BSONCollection](name, failoverStrategy))(users, userGroups, sessions)
-
 }
 
 object Rights extends Enumeration {

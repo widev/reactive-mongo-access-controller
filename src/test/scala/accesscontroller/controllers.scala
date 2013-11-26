@@ -64,8 +64,7 @@ class SessionsTest extends TestKit(ActorSystem("Sessions")) with WordSpecLike wi
 
   "deleteSession (from token) method" must {
     "return true to says the session is deleted" in {
-      val result = Await.result(access.sessions.deleteSession(session1.token), 1 second)
-      result must be(right = true)
+      Await.result(access.sessions.deleteSession(session1.token), 1 second)
     }
 
     "fail with NoMatchingSessionException" in {
