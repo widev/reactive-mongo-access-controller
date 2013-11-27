@@ -20,6 +20,9 @@ import accesscontroller._
 import accesscontroller.models._
 import accesscontroller.errors._
 
+/**
+ * The [[accesscontroller.wrapper.AccessControlDB]] wrap the [[reactivemongo.api.DB]].
+ */
 case class AccessControlDB(uri: String, name: String)(users: Users, userGroups: UserGroups, sessions: Sessions)
 {
   import scala.concurrent.ExecutionContext.Implicits.global
@@ -28,8 +31,22 @@ case class AccessControlDB(uri: String, name: String)(users: Users, userGroups: 
   private val connection = driver.connection(Seq(uri))
   private val db = connection(name)
 
+  /**
+   * Gets a collection from its name or create it if it doesn't already exists.
+   *
+   * @param name Collection name
+   * @param failoverStrategy A [[reactivemongo.api.FailoverStrategy]]
+   * @return An [[accesscontroller.wrapper.AccessControlCollection]]
+   */
   def apply(name: String, failoverStrategy: FailoverStrategy = db.failoverStrategy): AccessControlCollection = collection(name, failoverStrategy)
 
+  /**
+   * Gets a collection from its name or create it if it doesn't already exists.
+   *
+   * @param name Collection name
+   * @param failoverStrategy A [[reactivemongo.api.FailoverStrategy]]
+   * @return An [[accesscontroller.wrapper.AccessControlCollection]]
+   */
   def collection(name: String, failoverStrategy: FailoverStrategy = db.failoverStrategy): AccessControlCollection =
     AccessControlCollection(db[BSONCollection](name, failoverStrategy))(users, userGroups, sessions)
 }
@@ -91,6 +108,13 @@ object Wrapper {
 
 }
 
+/**
+ * The [[accesscontroller.wrapper.AccessControlCursor]] wraps the [[reactivemongo.api.Cursor]].
+ *
+ * The API is almost the same as the [[reactivemongo.api.Cursor]] API. I invite you to checkout this link if you do not
+ * know well the RactiveMongo API:
+ * http://reactivemongo.org/releases/nightly/api/index.html#reactivemongo.api.Cursor
+ */
 sealed case class AccessControlCursor[T](private val cursor: Cursor[AccessControl])(implicit reader: BSONDocumentReader[T]) {
   def enumerate(maxDocs: Int = Int.MaxValue, stopOnError: Boolean = false)(implicit ec: ExecutionContext): Enumerator[T] =
     cursor.enumerate(maxDocs, stopOnError = stopOnError).through[T](Enumeratee.map[AccessControl] {
@@ -121,6 +145,13 @@ sealed case class AccessControlCursor[T](private val cursor: Cursor[AccessContro
 
 }
 
+/**
+ * The [[accesscontroller.wrapper.AccessControlQueryBuilder]] wraps the [[reactivemongo.api.collections.GenericQueryBuilder]].
+ *
+ * The API is almost the same as the [[reactivemongo.api.collections.GenericQueryBuilder]] API. I invite you to checkout this
+ * link if you do not know well the ReactiveMongo API:
+ * http://reactivemongo.org/releases/nightly/api/index.html#reactivemongo.api.collections.GenericQueryBuilder
+ */
 sealed case class AccessControlQueryBuilder(private val queryBuilder: GenericQueryBuilder[BSONDocument, BSONDocumentReader, BSONDocumentWriter]) {
   def cursor[T](implicit reader: BSONDocumentReader[T] = queryBuilder.structureReader, ec: ExecutionContext): AccessControlCursor[T] = AccessControlCursor[T](queryBuilder.cursor[AccessControl])
 
@@ -148,6 +179,13 @@ sealed case class AccessControlQueryBuilder(private val queryBuilder: GenericQue
   def comment(message: String): AccessControlQueryBuilder = copy(queryBuilder.comment(message))
 }
 
+/**
+ * The [[accesscontroller.wrapper.AccessControllerIndexesManager]] wraps the [[reactivemongo.api.indexes.IndexesManager]].
+ *
+ * The API is almost the same as the [[reactivemongo.api.indexes.IndexesManager]] API. I invite you to checkout this
+ * link if you do not know well the ReactiveMongo API:
+ * http://reactivemongo.org/releases/nightly/api/index.html#reactivemongo.api.indexes.IndexesManager
+ */
 sealed case class AccessControllerIndexesManager(private val indexesManager: IndexesManager) {
   private def wrapIndex(nsIndex: NSIndex) = nsIndex.copy(index = nsIndex.index.copy(key = nsIndex.index.key.map { case (k, t) => ("model." + k, t) }))
 
@@ -173,6 +211,19 @@ sealed case class AccessControllerIndexesManager(private val indexesManager: Ind
 
 }
 
+/**
+ *
+ * The [[accesscontroller.wrapper.AccessControlCollection]] wraps the [[reactivemongo.api.collections.default.BSONCollection]].
+ *
+ * It permits to interact with MongoDb with permissions checking for each operations, so you don't have to
+ * handle it manually anymore.
+ *
+ * The documentation below is more focused on how to handle access controls than how ReactiveMongo internally works.
+ * However this class API is very similar to the [[reactivemongo.api.collections.default.BSONCollection]] one. I invite you
+ * to checkout this link if you do not know well the ReactiveMongo API:
+ * http://reactivemongo.org/releases/nightly/api/index.html#reactivemongo.api.collections.default.BSONCollection
+ *
+ */
 case class AccessControlCollection(private val collection: BSONCollection)(users: Users, userGroups: UserGroups, sessions: Sessions) {
 
   {
@@ -199,7 +250,25 @@ case class AccessControlCollection(private val collection: BSONCollection)(users
       }
     }
 
-  def setUserRights[S, U](selector: S, userId: BSONObjectID, rights: Rights.Value)(implicit swriter: BSONDocumentWriter[S], ac: AccessContext, ec: ExecutionContext): Future[Unit] =
+  /**
+   *
+   * Sets [[accesscontroller.wrapper.Rights.Rights]] to a specific [[accesscontroller.models.User]], using a MongoDb
+   * query to select the concerned documents.
+   *
+   * Only the documents on which the [[accesscontroller.models.AccessContext.user]] has rights will be selected.
+   *
+   * If the [[accesscontroller.models.User._id]] is unknown, an [[accesscontroller.errors.NoMatchingUserException]] is thrown.
+   *
+   * If the [[accesscontroller.models.AccessContext]] is inconsistent, an [[accesscontroller.errors.NotValidAccessContextException]]
+   * or [[accesscontroller.errors.ExpiredSessionException]] can be thrown.
+   *
+   * @param selector A MongoDb query
+   * @param userId An [[accesscontroller.models.User._id]]
+   * @param rights A [[accesscontroller.wrapper.Rights.Rights]] value
+   * @param ac Current [[accesscontroller.models.AccessContext]]
+   * @return A [[scala.concurrent.Future]] of [[scala.Unit]]
+   */
+  def setUserRights[S](selector: S, userId: BSONObjectID, rights: Rights.Value)(implicit swriter: BSONDocumentWriter[S], ac: AccessContext, ec: ExecutionContext): Future[Unit] =
     ac.check { implicit ac =>
       users.checkUsers(Set(userId)).flatMap {
         case true => setRights(selector, userId, rights)
@@ -207,6 +276,23 @@ case class AccessControlCollection(private val collection: BSONCollection)(users
       }
     }
 
+  /**
+   * Sets [[accesscontroller.wrapper.Rights.Rights]] to a specific [[accesscontroller.models.UserGroup]], using a MongoDb
+   * query to select the concerned documents.
+   *
+   * Only the documents on which the [[accesscontroller.models.AccessContext.user]] has rights will be selected.
+   *
+   * If the [[accesscontroller.models.User._id]] is unknown, an [[accesscontroller.errors.NoMatchingUserException]] is thrown.
+   *
+   * If the [[accesscontroller.models.AccessContext]] is inconsistent, a [[accesscontroller.errors.NotValidAccessContextException]]
+   * or [[accesscontroller.errors.ExpiredSessionException]] can be thrown.
+   *
+   * @param selector A MongoDb query
+   * @param userGroupId An [[accesscontroller.models.UserGroup._id]]
+   * @param rights A [[accesscontroller.wrapper.Rights.Rights]] value
+   * @param ac Current [[accesscontroller.models.AccessContext]]
+   * @return A [[scala.concurrent.Future]] of [[scala.Unit]]
+   */
   def setUserGroupRights[S](selector: S, userGroupId: BSONObjectID, rights: Rights.Value)(implicit swriter: BSONDocumentWriter[S], ac: AccessContext, ec: ExecutionContext): Future[Unit] =
     ac.checkSync { implicit ac =>
       userGroups.checkGroups(Set(userGroupId)).flatMap {
@@ -215,16 +301,38 @@ case class AccessControlCollection(private val collection: BSONCollection)(users
       }
     }
 
+  /**
+   * Finds every documents on which the [[accesscontroller.models.AccessContext.user]] has writes.
+   *
+   * If the [[accesscontroller.models.AccessContext]] is inconsistent, a [[accesscontroller.errors.NotValidAccessContextException]]
+   * or [[accesscontroller.errors.ExpiredSessionException]] can be thrown.
+   */
   def find[S, P](selector: S, projection: P)(implicit swriter: BSONDocumentWriter[S], pwriter: BSONDocumentWriter[P], ac: AccessContext): GenericQueryBuilder[BSONDocument, BSONDocumentReader, BSONDocumentWriter] =
     ac.checkSync { implicit ac =>
       collection.find(Wrapper.wrapSelectorForReading(selector), Wrapper.wrapExternalQuery(projection))
     }
 
+  /**
+   * Finds every documents on which the [[accesscontroller.models.AccessContext.user]] has writes.
+   *
+   * If the [[accesscontroller.models.AccessContext]] is inconsistent, a [[accesscontroller.errors.NotValidAccessContextException]]
+   * or [[accesscontroller.errors.ExpiredSessionException]] can be thrown.
+   */
   def find[S](selector: S)(implicit swriter: BSONDocumentWriter[S], ac: AccessContext, ec: ExecutionContext): AccessControlQueryBuilder =
     ac.checkSync { implicit ac =>
       AccessControlQueryBuilder(collection.find(Wrapper.wrapSelectorForReading(selector)))
     }
 
+  /**
+   * Inserts an amount of documents from an [[play.api.libs.iteratee.Enumerator]].
+   *
+   * The [[accesscontroller.models.AccessContext.user]] has write rights on the inserted documents.
+   *
+   * If the [[accesscontroller.models.AccessContext]] is inconsistent, a [[accesscontroller.errors.NotValidAccessContextException]]
+   * or [[accesscontroller.errors.ExpiredSessionException]] can be thrown.
+   *
+   * If the [[accesscontroller.models.AccessContext.user]] is unknown, a [[accesscontroller.errors.NoMatchingUserException]] is thrown.
+   */
   def bulkInsert[T](enumerator: Enumerator[T], bulkSize: Int, bulkByteSize: Int)(implicit writer: BSONDocumentWriter[T], ec: ExecutionContext, ac: AccessContext): Future[Int] =
     ac.check { implicit ac =>
       users.checkUsers(Set(ac.user._id)).flatMap {
@@ -233,27 +341,159 @@ case class AccessControlCollection(private val collection: BSONCollection)(users
       }
     }
 
-  def bulkInsertIteratee[T](bulkSize: Int, bulkByteSize: Int)(implicit writer: BSONDocumentWriter[T], ec: ExecutionContext, ac: AccessContext): Iteratee[T, Int] =
-    ac.checkSync { implicit ac =>
-      Enumeratee.map { model: T => Wrapper.modelToAccessControl(model) } &>> collection.bulkInsertIteratee(bulkSize, bulkByteSize)
+  /**
+   * Create an [[play.api.libs.iteratee.Iteratee]] waiting to be feed in order to insert chunks of documents.
+   *
+   * The [[accesscontroller.models.AccessContext.user]] has write rights on the inserted documents.
+   *
+   * If the [[accesscontroller.models.AccessContext]] is inconsistent, a [[accesscontroller.errors.NotValidAccessContextException]]
+   * or [[accesscontroller.errors.ExpiredSessionException]] can be thrown.
+   *
+   * If the [[accesscontroller.models.AccessContext.user]] is unknown, a [[accesscontroller.errors.NoMatchingUserException]] is thrown.
+   */
+  def bulkInsertIteratee[T](bulkSize: Int, bulkByteSize: Int)(implicit writer: BSONDocumentWriter[T], ec: ExecutionContext, ac: AccessContext): Future[Iteratee[T, Int]] =
+    ac.check { implicit ac =>
+      users.checkUsers(Set(ac.user._id)).flatMap {
+        case true => Future.successful(
+          Enumeratee.map { model: T => Wrapper.modelToAccessControl(model) } &>> collection.bulkInsertIteratee(bulkSize, bulkByteSize)
+        )
+        case _ => Future.failed(NoMatchingUserException(ac.user._id.stringify))
+      }
     }
 
+  /**
+   * Inserts a document.
+   *
+   * The [[accesscontroller.models.AccessContext.user]] has write rights on the inserted document.
+   *
+   * If the [[accesscontroller.models.AccessContext]] is inconsistent, a [[accesscontroller.errors.NotValidAccessContextException]]
+   * or [[accesscontroller.errors.ExpiredSessionException]] can be thrown.
+   *
+   * If the [[accesscontroller.models.AccessContext.user]] is unknown, a [[accesscontroller.errors.NoMatchingUserException]] is thrown.
+   */
   def insert[T](document: T, writeConcern: GetLastError = GetLastError())(implicit writer: BSONDocumentWriter[T], ec: ExecutionContext, ac: AccessContext): Future[LastError] =
     ac.check { implicit ac =>
-      Wrapper.secureDocumentToAccessControl(document)(users).flatMap { accessControl =>
-        collection.insert(accessControl, writeConcern)
+      users.checkUsers(Set(ac.user._id)).flatMap {
+        case true => Wrapper.secureDocumentToAccessControl(document)(users).flatMap { accessControl =>
+          collection.insert(accessControl, writeConcern)
+        }
+        case _ => Future.failed(NoMatchingUserException(ac.user._id.stringify))
       }
     }
 
+  /**
+   * Inserts a document.
+   *
+   * The [[accesscontroller.models.AccessContext.user]] has write rights on the inserted document.
+   *
+   * If the [[accesscontroller.models.AccessContext]] is inconsistent, a [[accesscontroller.errors.NotValidAccessContextException]]
+   * or [[accesscontroller.errors.ExpiredSessionException]] can be thrown.
+   *
+   * If the [[accesscontroller.models.AccessContext.user]] is unknown, a [[accesscontroller.errors.NoMatchingUserException]] is thrown.
+   */
   def insert(document: BSONDocument, writeConcern: GetLastError)(implicit ec: ExecutionContext, ac: AccessContext): Future[LastError] =
     ac.check { implicit ac =>
-      Wrapper.secureDocumentToAccessControl(document)(users).flatMap { accessControl =>
-        collection.insert(accessControl, writeConcern)
+      users.checkUsers(Set(ac.user._id)).flatMap {
+        case true => Wrapper.secureDocumentToAccessControl(document)(users).flatMap { accessControl =>
+          collection.insert(accessControl, writeConcern)
+        }
+        case _ => Future.failed(NoMatchingUserException(ac.user._id.stringify))
       }
     }
 
+  /**
+   * Inserts a document.
+   *
+   * The [[accesscontroller.models.AccessContext.user]] has write rights on the inserted document.
+   *
+   * If the [[accesscontroller.models.AccessContext]] is inconsistent, a [[accesscontroller.errors.NotValidAccessContextException]]
+   * or [[accesscontroller.errors.ExpiredSessionException]] can be thrown.
+   *
+   * If the [[accesscontroller.models.AccessContext.user]] is unknown, a [[accesscontroller.errors.NoMatchingUserException]] is thrown.
+   */
   def insert(document: BSONDocument)(implicit ec: ExecutionContext, ac: AccessContext): Future[LastError] = insert(document, GetLastError())
 
+  /**
+   * Saves a document.
+   *
+   * The [[accesscontroller.models.AccessContext.user]] has write rights on the inserted document.
+   *
+   * If the [[accesscontroller.models.AccessContext]] is inconsistent, a [[accesscontroller.errors.NotValidAccessContextException]]
+   * or [[accesscontroller.errors.ExpiredSessionException]] can be thrown.
+   *
+   * If the [[accesscontroller.models.AccessContext.user]] is unknown, a [[accesscontroller.errors.NoMatchingUserException]] is thrown.
+   */
+  def save[T](doc: T, writeConcern: GetLastError)(implicit ec: ExecutionContext, writer: BSONDocumentWriter[T], ac: AccessContext): Future[LastError] =
+    ac.check { implicit ac =>
+      users.checkUsers(Set(ac.user._id)).flatMap {
+        case true => Wrapper.secureDocumentToAccessControl(doc)(users).flatMap { accessControl =>
+          collection.save(accessControl, writeConcern)
+        }
+        case _ => Future.failed(NoMatchingUserException(ac.user._id.stringify))
+      }
+    }
+
+  /**
+   * Saves a document.
+   *
+   * The [[accesscontroller.models.AccessContext.user]] has write rights on the inserted document.
+   *
+   * If the [[accesscontroller.models.AccessContext]] is inconsistent, a [[accesscontroller.errors.NotValidAccessContextException]]
+   * or [[accesscontroller.errors.ExpiredSessionException]] can be thrown.
+   *
+   * If the [[accesscontroller.models.AccessContext.user]] is unknown, a [[accesscontroller.errors.NoMatchingUserException]] is thrown.
+   */
+  def save(doc: BSONDocument, writeConcern: GetLastError)(implicit ec: ExecutionContext, ac: AccessContext): Future[LastError] =
+    ac.check { implicit ac =>
+      users.checkUsers(Set(ac.user._id)).flatMap {
+        case true => Wrapper.secureDocumentToAccessControl(doc)(users).flatMap { accessControl =>
+          collection.save(accessControl, writeConcern)
+        }
+        case _ => Future.failed(NoMatchingUserException(ac.user._id.stringify))
+      }
+    }
+
+  /**
+   * Saves a document.
+   *
+   * The [[accesscontroller.models.AccessContext.user]] has write rights on the inserted document.
+   *
+   * If the [[accesscontroller.models.AccessContext]] is inconsistent, a [[accesscontroller.errors.NotValidAccessContextException]]
+   * or [[accesscontroller.errors.ExpiredSessionException]] can be thrown.
+   *
+   * If the [[accesscontroller.models.AccessContext.user]] is unknown, a [[accesscontroller.errors.NoMatchingUserException]] is thrown.
+   */
+  def save(doc: BSONDocument)(implicit ec: ExecutionContext, ac: AccessContext): Future[LastError] =
+    ac.check { implicit ac =>
+      users.checkUsers(Set(ac.user._id)).flatMap {
+        case true => Wrapper.secureDocumentToAccessControl(doc)(users).flatMap { accessControl =>
+          collection.save(accessControl)
+        }
+        case _ => Future.failed(NoMatchingUserException(ac.user._id.stringify))
+      }
+    }
+
+  /**
+   * Insert a document with no failure checks
+   *
+   * The [[accesscontroller.models.AccessContext.user]] has write rights on the inserted document.
+   *
+   * If the [[accesscontroller.models.AccessContext]] is inconsistent, a [[accesscontroller.errors.NotValidAccessContextException]]
+   * or [[accesscontroller.errors.ExpiredSessionException]] can be thrown.
+   */
+  def uncheckedInsert[T](document: T)(implicit writer: BSONDocumentWriter[T], ec: ExecutionContext, ac: AccessContext): Unit =
+    ac.checkSync { implicit ac =>
+      Wrapper.secureDocumentToAccessControl(document)(users).foreach { accessControl =>
+        collection.uncheckedInsert(accessControl)
+      }
+    }
+
+  /**
+   * Removes the selected documents on which the [[accesscontroller.models.AccessContext.user]] has rights.
+   *
+   * If the [[accesscontroller.models.AccessContext]] is inconsistent, a [[accesscontroller.errors.NotValidAccessContextException]]
+   * or [[accesscontroller.errors.ExpiredSessionException]] can be thrown.
+   */
   def remove[T](query: T, writeConcern: GetLastError = GetLastError(), firstMatchOnly: Boolean = false)(implicit writer: BSONDocumentWriter[T], ec: ExecutionContext, ac: AccessContext): Future[LastError] =
     ac.check { implicit ac =>
       collection.remove(Wrapper.wrapSelectorForWriting(query), writeConcern, firstMatchOnly).flatMap {
@@ -262,49 +502,39 @@ case class AccessControlCollection(private val collection: BSONCollection)(users
       }
     }
 
-  def save[T](doc: T, writeConcern: GetLastError)(implicit ec: ExecutionContext, writer: BSONDocumentWriter[T], ac: AccessContext): Future[LastError] =
-    ac.check { implicit ac =>
-      Wrapper.secureDocumentToAccessControl(doc)(users).flatMap { accessControl =>
-        collection.save(accessControl, writeConcern)
-      }
-    }
-
-  def save(doc: BSONDocument, writeConcern: GetLastError)(implicit ec: ExecutionContext, ac: AccessContext): Future[LastError] =
-    ac.check { implicit ac =>
-      Wrapper.secureDocumentToAccessControl(doc)(users).flatMap { accessControl =>
-        collection.save(accessControl, writeConcern)
-      }
-    }
-
-  def save(doc: BSONDocument)(implicit ec: ExecutionContext, ac: AccessContext): Future[LastError] =
-    ac.check { implicit ac =>
-      Wrapper.secureDocumentToAccessControl(doc)(users).flatMap { accessControl =>
-        collection.save(accessControl)
-      }
-    }
-
-  def uncheckedInsert[T](document: T)(implicit writer: BSONDocumentWriter[T], ec: ExecutionContext, ac: AccessContext): Unit =
-    ac.checkSync { implicit ac =>
-      Wrapper.secureDocumentToAccessControl(document)(users).foreach { accessControl =>
-        collection.uncheckedInsert(accessControl)
-      }
-    }
-
+  /**
+   * Removes the selected documents on which the [[accesscontroller.models.AccessContext.user]] has rights with no failure check.
+   *
+   * If the [[accesscontroller.models.AccessContext]] is inconsistent, a [[accesscontroller.errors.NotValidAccessContextException]]
+   * or [[accesscontroller.errors.ExpiredSessionException]] can be thrown.
+   */
   def uncheckedRemove[T](query: T, firstMatchOnly: Boolean)(implicit writer: BSONDocumentWriter[T], ec: ExecutionContext, ac: AccessContext): Unit =
     ac.checkSync { implicit ac =>
       collection.uncheckedRemove(Wrapper.wrapSelectorForWriting(query), firstMatchOnly)
     }
 
-  def uncheckedUpdate[S, U](selector: S, update: U, upsert: Boolean, multi: Boolean)(implicit selectorWriter: BSONDocumentWriter[S], updateWriter: BSONDocumentWriter[U], ac: AccessContext): Unit =
-    ac.checkSync { implicit ac =>
-      collection.uncheckedUpdate(Wrapper.wrapSelectorForWriting(selector), Wrapper.wrapUpdate(update), upsert, multi)
-    }
-
+  /**
+   * Updates the selected documents on which the [[accesscontroller.models.AccessContext.user]] has rights.
+   *
+   * If the [[accesscontroller.models.AccessContext]] is inconsistent, a [[accesscontroller.errors.NotValidAccessContextException]]
+   * or [[accesscontroller.errors.ExpiredSessionException]] can be thrown.
+   */
   def update[S, U](selector: S, update: U, writeConcern: GetLastError = GetLastError(), upsert: Boolean = false, multi: Boolean = false)(implicit selectorWriter: BSONDocumentWriter[S], updateWriter: BSONDocumentWriter[U], ec: ExecutionContext, ac: AccessContext): Future[LastError] =
     ac.check { implicit ac =>
       collection.update(Wrapper.wrapSelectorForWriting(selector), Wrapper.wrapUpdate(update), writeConcern, upsert, multi).flatMap {
         case result if result.updated > 0 => Future.successful(result)
         case _ => Future.failed(NoWriteAccessOnSelectedDataException(selector))
       }
+    }
+
+  /**
+   * Updates the selected documents on which the [[accesscontroller.models.AccessContext.user]] has rights with no failure check.
+   *
+   * If the [[accesscontroller.models.AccessContext]] is inconsistent, a [[accesscontroller.errors.NotValidAccessContextException]]
+   * or [[accesscontroller.errors.ExpiredSessionException]] can be thrown.
+   */
+  def uncheckedUpdate[S, U](selector: S, update: U, upsert: Boolean, multi: Boolean)(implicit selectorWriter: BSONDocumentWriter[S], updateWriter: BSONDocumentWriter[U], ac: AccessContext): Unit =
+    ac.checkSync { implicit ac =>
+      collection.uncheckedUpdate(Wrapper.wrapSelectorForWriting(selector), Wrapper.wrapUpdate(update), upsert, multi)
     }
 }

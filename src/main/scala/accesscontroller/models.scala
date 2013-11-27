@@ -13,9 +13,14 @@ object AccessControlLists {
   implicit val Handler = Macros.handler[AccessControlLists]
 }
 
-case class AccessControl(model: BSONDocument, accessLists: AccessControlLists = AccessControlLists())
+case class AccessControl(model: BSONDocument, accessLists: AccessControlLists = AccessControlLists(), trashed: Option[DateTime] = None)
 
 object AccessControl {
+  implicit object BSONDateTimeHandler extends BSONHandler[BSONDateTime, DateTime] {
+    def read(d: BSONDateTime) = new DateTime(d.value)
+    def write(d: DateTime) = BSONDateTime(d.getMillis)
+  }
+
   implicit val Handler = Macros.handler[AccessControl]
 }
 
