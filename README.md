@@ -14,7 +14,8 @@ The project is still in development, but I am actually working hard on it in ord
 Most of the API methods are actually tested, so you can give it a try. However, the sources are still growing fast so take care keeping it up to date.
 
 ##Insttalation
-The sonatype repository is not yet opened, but you always can deploy it locally by cloning it and following these few steps:
+The sonatype repository is not yet opened, but you can deploy it locally by cloning it and following these few steps:
 
 * `sbt publish-local`
-* then add `"com.github.trupin" %% "reactivemongoaccesscontroller" % "0.1-SNAPSHOT"` in your project dependencies
+* then add `"Local Maven Repository" at "file://your/home/path/.ivy2/local/com.github.trupin/"` to your project resolvers
+* and add `"com.github.trupin" %% "reactivemongoaccesscontroller" % "0.1-SNAPSHOT"` in your project dependencies
