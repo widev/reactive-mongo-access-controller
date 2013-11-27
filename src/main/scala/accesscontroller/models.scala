@@ -75,15 +75,15 @@ object User {
 }
 
 case class AccessContext(user: User, session: Option[Session], private val checked: Boolean = false) {
-  private[accesscontroller] def checkSync[R](then:(AccessContext) => R): R = (checked, session) match {
+  private[accesscontroller] def checkSync[R](next:(AccessContext) => R): R = (checked, session) match {
     case (_, None) => throw NotValidAccessContextException()
     case (false, Some(s)) if s.expirationDate.isBeforeNow => throw ExpiredSessionException(s.token)
-    case _ => then(this.copy(session = Some(session.get.copy(expirationDate = DateTime.now().plusSeconds(Session.config.getInt("ttl")))), checked = true))
+    case _ => next(this.copy(session = Some(session.get.copy(expirationDate = DateTime.now().plusSeconds(Session.config.getInt("ttl")))), checked = true))
   }
 
-  private[accesscontroller] def check[R](then:(AccessContext) => Future[R]): Future[R] = (checked, session) match {
+  private[accesscontroller] def check[R](next:(AccessContext) => Future[R]): Future[R] = (checked, session) match {
     case (_, None) => Future.failed(NotValidAccessContextException())
     case (false, Some(s)) if s.expirationDate.isBeforeNow => Future.failed(ExpiredSessionException(s.token))
-    case _ => then(this.copy(session = Some(session.get.copy(expirationDate = DateTime.now().plusSeconds(Session.config.getInt("ttl")))), checked = true))
+    case _ => next(this.copy(session = Some(session.get.copy(expirationDate = DateTime.now().plusSeconds(Session.config.getInt("ttl")))), checked = true))
   }
 }
