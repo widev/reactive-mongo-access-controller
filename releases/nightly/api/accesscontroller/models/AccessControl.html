@@ -40,7 +40,7 @@
         <span class="kind">case class</span>
       </span>
       <span class="symbol">
-        <span class="name">AccessControl</span><span class="params">(<span name="model">model: <span class="extype" name="reactivemongo.bson.BSONDocument">BSONDocument</span></span>, <span name="accessLists">accessLists: <a href="AccessControlLists.html" class="extype" name="accesscontroller.models.AccessControlLists">AccessControlLists</a> = <span class="defval" name="AccessControlLists.apply(AccessControlLists.apply$default$1, AccessControlLists.apply$default$2)">...</span></span>)</span><span class="result"> extends <span class="extype" name="scala.Product">Product</span> with <span class="extype" name="scala.Serializable">Serializable</span></span>
+        <span class="name">AccessControl</span><span class="params">(<span name="model">model: <span class="extype" name="reactivemongo.bson.BSONDocument">BSONDocument</span></span>, <span name="accessLists">accessLists: <a href="AccessControlLists.html" class="extype" name="accesscontroller.models.AccessControlLists">AccessControlLists</a> = <span class="defval" name="AccessControlLists.apply(AccessControlLists.apply$default$1, AccessControlLists.apply$default$2)">...</span></span>, <span name="trashed">trashed: <span class="extype" name="scala.Option">Option</span>[<span class="extype" name="org.joda.time.DateTime">DateTime</span>] = <span class="symbol">scala.None</span></span>)</span><span class="result"> extends <span class="extype" name="scala.Product">Product</span> with <span class="extype" name="scala.Serializable">Serializable</span></span>
       </span>
       </h4>
       
@@ -85,7 +85,7 @@
         <div id="constructors" class="members">
               <h3>Instance Constructors</h3>
               <ol><li name="accesscontroller.models.AccessControl#&lt;init&gt;" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
-      <a id="&lt;init&gt;(model:reactivemongo.bson.BSONDocument,accessLists:accesscontroller.models.AccessControlLists):accesscontroller.models.AccessControl"></a>
+      <a id="&lt;init&gt;(model:reactivemongo.bson.BSONDocument,accessLists:accesscontroller.models.AccessControlLists,trashed:Option[org.joda.time.DateTime]):accesscontroller.models.AccessControl"></a>
       <a id="&lt;init&gt;:AccessControl"></a>
       <h4 class="signature">
       <span class="modifier_kind">
@@ -93,7 +93,7 @@
         <span class="kind">new</span>
       </span>
       <span class="symbol">
-        <span class="name">AccessControl</span><span class="params">(<span name="model">model: <span class="extype" name="reactivemongo.bson.BSONDocument">BSONDocument</span></span>, <span name="accessLists">accessLists: <a href="AccessControlLists.html" class="extype" name="accesscontroller.models.AccessControlLists">AccessControlLists</a> = <span class="defval" name="AccessControlLists.apply(AccessControlLists.apply$default$1, AccessControlLists.apply$default$2)">...</span></span>)</span>
+        <span class="name">AccessControl</span><span class="params">(<span name="model">model: <span class="extype" name="reactivemongo.bson.BSONDocument">BSONDocument</span></span>, <span name="accessLists">accessLists: <a href="AccessControlLists.html" class="extype" name="accesscontroller.models.AccessControlLists">AccessControlLists</a> = <span class="defval" name="AccessControlLists.apply(AccessControlLists.apply$default$1, AccessControlLists.apply$default$2)">...</span></span>, <span name="trashed">trashed: <span class="extype" name="scala.Option">Option</span>[<span class="extype" name="org.joda.time.DateTime">DateTime</span>] = <span class="symbol">scala.None</span></span>)</span>
       </span>
       </h4>
       
@@ -333,6 +333,19 @@
       </span>
       </h4>
       <div class="fullcomment"><dl class="attributes block"> <dt>Definition Classes</dt><dd>AnyRef</dd></dl></div>
+    </li><li name="accesscontroller.models.AccessControl#trashed" visbl="pub" data-isabs="false" fullComment="no" group="Ungrouped">
+      <a id="trashed:Option[org.joda.time.DateTime]"></a>
+      <a id="trashed:Option[DateTime]"></a>
+      <h4 class="signature">
+      <span class="modifier_kind">
+        <span class="modifier"></span>
+        <span class="kind">val</span>
+      </span>
+      <span class="symbol">
+        <span class="name">trashed</span><span class="result">: <span class="extype" name="scala.Option">Option</span>[<span class="extype" name="org.joda.time.DateTime">DateTime</span>]</span>
+      </span>
+      </h4>
+      
     </li><li name="scala.AnyRef#wait" visbl="pub" data-isabs="false" fullComment="yes" group="Ungrouped">
       <a id="wait():Unit"></a>
       <a id="wait():Unit"></a>
