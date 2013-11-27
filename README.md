@@ -12,3 +12,9 @@ You can find the API documentation [here](http://trupin.github.io/ReactiveMongoA
 The project is still in development, but I am actually working hard on it in order to use it for several of my personnal projects, so it should be released soon.
 
 Most of the API methods are actually tested, so you can give it a try. However, the sources are still growing fast so take care keeping it up to date.
+
+##Insttalation
+The sonatype repository is not yet opened, but you always can deploy it locally by cloning it and following these few steps:
+
+* `sbt publish-local`
+* then add `"com.github.trupin" %% "reactivemongoaccesscontroller" % "0.1-SNAPSHOT"` in your project dependencies
