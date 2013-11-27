@@ -24,6 +24,7 @@ object build extends Build {
   )
 
   lazy val publishSettings = Seq(
+    credentials += Credentials(Path.userHome / ".sbt" / "0.12" / "sonatype.sbt"),
     publishMavenStyle := true,
     publishTo := Some("snapshots" at "https://oss.sonatype.org/content/repositories/snapshots"),
     publishArtifact in Test := false,
