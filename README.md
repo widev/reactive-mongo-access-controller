@@ -13,7 +13,7 @@ The project is still in development, but I am actually working hard on it in ord
 
 Most of the API methods are actually tested, so you can give it a try. However, the sources are still growing fast so take care keeping it up to date.
 
-##Insttalation
+##Installation
 The sonatype repository is not yet opened, but you can deploy it locally by cloning it and following these few steps:
 
 * `sbt publish-local`
