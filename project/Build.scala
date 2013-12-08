@@ -7,7 +7,9 @@ object build extends Build {
     name := "ReactiveMongoAccessController",
     organization := "com.github.trupin",
     version := "0.1-SNAPSHOT",
-    scalaVersion := "2.10.+",
+    scalaVersion := "2.10.2",
+    crossScalaVersions := Seq("2.10.2"),
+    crossVersion := CrossVersion.binary,
     javaOptions in test ++= Seq("-Xmx512m", "-XX:MaxPermSize=1024m"),
     scalacOptions ++= Seq("-unchecked", "-deprecation"),
     resolvers += "Typesafe Releases" at "http://repo.typesafe.com/typesafe/releases",
@@ -24,8 +26,8 @@ object build extends Build {
   )
 
   lazy val publishSettings = Seq(
-    credentials += Credentials(Path.userHome / ".sbt" / "0.12" / "sonatype.sbt"),
     publishMavenStyle := true,
+    credentials += Credentials(Path.userHome / ".ivy2" / ".credentials"),
     publishTo := Some("snapshots" at "https://oss.sonatype.org/content/repositories/snapshots"),
     publishArtifact in Test := false,
     pomIncludeRepository := { _ => false },

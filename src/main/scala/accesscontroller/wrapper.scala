@@ -180,35 +180,34 @@ sealed case class AccessControlQueryBuilder(private val queryBuilder: GenericQue
 }
 
 /**
- * The [[accesscontroller.wrapper.AccessControllerIndexesManager]] wraps the [[reactivemongo.api.indexes.IndexesManager]].
+ * The [[accesscontroller.wrapper.AccessControlIndexesManager]] wraps the [[reactivemongo.api.indexes.IndexesManager]].
  *
  * The API is almost the same as the [[reactivemongo.api.indexes.IndexesManager]] API. I invite you to checkout this
  * link if you do not know well the ReactiveMongo API:
  * http://reactivemongo.org/releases/nightly/api/index.html#reactivemongo.api.indexes.IndexesManager
  */
-sealed case class AccessControllerIndexesManager(private val indexesManager: IndexesManager) {
-  private def wrapIndex(nsIndex: NSIndex) = nsIndex.copy(index = nsIndex.index.copy(key = nsIndex.index.key.map { case (k, t) => ("model." + k, t) }))
+sealed case class AccessControlIndexesManager(private val indexesManager: CollectionIndexesManager) {
+  private def wrapIndex(index: Index) = index.copy(key = index.key.map { case (k, t) => ("model." + k, t) })
 
-  def list(implicit ec: ExecutionContext): Future[List[NSIndex]] = indexesManager.list().map { indexes =>
-    indexes.filter { nsIndex =>
-      if (nsIndex.index.key.count {
+  def list(implicit ec: ExecutionContext): Future[List[Index]] = indexesManager.list().map { indexes =>
+    indexes.filter { index =>
+      if (index.key.count {
         case (k, t) if k.startsWith("model.") => true
         case _ => false
-      } != nsIndex.index.key.size)
+      } != index.key.size)
         true
       else
         false
     }
   }
 
-  def ensure(nsIndex: NSIndex): Future[Boolean] = indexesManager.ensure(wrapIndex(nsIndex))
+  def ensure(index: Index): Future[Boolean] = indexesManager.ensure(wrapIndex(index))
 
-  def create(nsIndex: NSIndex): Future[LastError] = indexesManager.create(wrapIndex(nsIndex))
+  def create(index: Index): Future[LastError] = indexesManager.create(wrapIndex(index))
 
-  def delete(nsIndex: NSIndex): Future[Int] = indexesManager.delete(wrapIndex(nsIndex))
+  def delete(index: Index): Future[Int] = indexesManager.delete(wrapIndex(index))
 
-  def delete(collectionName: String, indexName: String): Future[Int] = indexesManager.delete(collectionName, "model." + indexName)
-
+  def delete(collectionName: String, indexName: String): Future[Int] = indexesManager.delete("model." + indexName)
 }
 
 /**
@@ -249,6 +248,11 @@ case class AccessControlCollection(private val collection: BSONCollection)(users
         case _ => Future.failed(NoWriteAccessOnSelectedDataException(selector))
       }
     }
+
+  /**
+   * @return An instance of [[accesscontroller.wrapper.AccessControlIndexesManager]].
+   */
+  def indexesManager(implicit ec: ExecutionContext): AccessControlIndexesManager = AccessControlIndexesManager(collection.indexesManager)
 
   /**
    *
