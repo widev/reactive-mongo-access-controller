@@ -17,7 +17,7 @@ object build extends Build {
     libraryDependencies ++= Seq(
       "com.typesafe.akka" %% "akka-actor" % "2.2.+",
       "com.typesafe.akka" %% "akka-testkit" % "2.2.+" % "test",
-      "org.reactivemongo" %% "reactivemongo" % "0.10.0-SNAPSHOT",
+      "org.reactivemongo" %% "reactivemongo" % "0.10.0",
       "joda-time" %  "joda-time" % "2.1",
       "org.joda" % "joda-convert" % "1.2",
       "ch.qos.logback" % "logback-classic" % "1.0.10",
