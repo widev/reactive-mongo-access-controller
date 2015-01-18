@@ -1,3 +1,5 @@
+This library is not maintained, nor used in Widev server anymore
+
 #ReactiveMongo Access Controller
 
 `ReactiveMongoAccessController` is a library built on top of the [`ReactiveMongo`](https://github.com/ReactiveMongo/ReactiveMongo) driver, giving you a safe and easy way to check the access rights on your mongodb data.
